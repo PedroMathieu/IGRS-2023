@@ -32,6 +32,14 @@ public class Myapp extends SipServlet {
 		return state;
 	}
 
+	public String getContact() {
+        return contact;
+    }
+
+	public void setState(String state) {
+        this.state = state;
+    }
+
 	/**
 	 * 
 	 */
@@ -121,7 +129,8 @@ public class Myapp extends SipServlet {
 			String domain = aor.substring(aor.indexOf("@") + 1); // Obtemos o domain (O que está a seguir ao  único '@')
 
 			if ("acme.pt".equals(domain)) { // Se o domain corresponder a "acme.pt"
-				RegistrarDB.put(aor, contact); // Adiciona à bd
+				//RegistrarDB.put(aor, contact); Adiciona à bd
+				RegistrarDB.put(aor, new ContactInfo(contact, "online"));
 				response = request.createResponse(200); // Resposta 200 (Sucess response)
 				response.send(); // Envia a mensagem
 
@@ -182,20 +191,22 @@ public class Myapp extends SipServlet {
 					response = request.createResponse(404);
 					response.send();
 				}else{
+					
 					Proxy proxy = request.getProxy();
 					proxy.setRecordRoute(false);
 					proxy.setSupervised(false);
 
-					ContactInfo contactInfo = RegistrarDB.get(aor);
+					ContactInfo contactInfo = RegistrarDB.get(recipientAor);
 					URI toContact = factory.createURI(contactInfo.getContact());
+
 					proxy.proxyTo(toContact);
 					log("INVITE (myapp): AOR " + aor + " is selected with state: " + contactInfo.getState());
 				}
-				} else {
-			Proxy proxy = request.getProxy();
-			proxy.proxyTo(request.getRequestURI());
+			} else {
+				Proxy proxy = request.getProxy();
+				proxy.proxyTo(request.getRequestURI());
+			}	
 		}
-			}
 		
 		// Some logs to show the content of the Registrar database.
 		/* log("INVITE (myapp):***");
