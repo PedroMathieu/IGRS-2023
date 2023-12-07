@@ -1,4 +1,3 @@
-
 /*
  * $Id: EchoServlet.java,v 1.5 2003/06/22 12:32:15 fukuda Exp $
  */
@@ -26,6 +25,8 @@ public class Myapp extends SipServlet {
 	private static final long serialVersionUID = 1L;
 	static private Map<String, String> RegistrarDB;
 	static private SipFactory factory;
+	private static final String CONFERENCE_URI = "sip:conference";
+    private static final String CONFERENCE_ROOM = "conference_";
 	
 	public Myapp() {
 		super();
@@ -185,12 +186,9 @@ public class Myapp extends SipServlet {
 		SipServletResponse response = request.createResponse(404);
 		response.send();
 		*/
-		
-		String aor = getSIPuri(request.getHeader("To")); // Get the To AoR
-		String domain = aor.substring(aor.indexOf("@")+1, aor.length());
-		log(domain);
-		if (domain.equals("a.pt")) { // The To domain is the same as the server 
-	    	if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
+
+        if ("acme.pt".equals(domain)) {
+            if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
 				SipServletResponse response; 
 				response = request.createResponse(404);
 				response.send();
@@ -200,11 +198,25 @@ public class Myapp extends SipServlet {
 				proxy.setSupervised(false);
 				URI toContact = factory.createURI(RegistrarDB.get(aor));
 				proxy.proxyTo(toContact);
+
+				if (isConferenceCall(request.getRequestURI().toString())) {
+                // Add participant to a conference call
+                String conferenceRoom = determineConferenceRoom(request.getRequestURI().toString());
+                addParticipantToConference(request, toContact, conferenceRoom);
+				}
 			}			
-		} else {
-			Proxy proxy = request.getProxy();
-			proxy.proxyTo(request.getRequestURI());
-		}
+				
+
+        } else if (request.getRequestURI().toString().startsWith(CONFERENCE_URI_PREFIX)) {
+            // Handle INVITE for a conference call
+            handleConferenceCall(request);
+        } else {
+            // Destination user is not within the predefined domain, handle accordingly
+            // You might choose to respond with an error or proxy to an external SIP server
+            Proxy proxy = request.getProxy();
+            proxy.proxyTo(request.getRequestURI());
+        }
+    }
 
 		/*
 	    if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
@@ -218,7 +230,64 @@ public class Myapp extends SipServlet {
 			response.send();
 		}
 		*/
-	}
+
+	private void addParticipantToConference(SipServletRequest request, String participantContact, String conferenceRoom) {
+        try {
+            SipSessionsUtil sessionsUtil = (SipSessionsUtil) getServletContext().getAttribute(SIP_SESSIONS_UTIL);
+            SipApplicationSession sipApplicationSession = request.getApplicationSession();
+            SipSession sipSession = sessionsUtil.createSipSession(sipApplicationSession);
+            sipSession.setAttribute(CONFERENCE_ROOM_PREFIX + conferenceRoom, conferenceRoom);
+
+            // Forward INVITE to the conference URI
+            SipServletRequest conferenceInvite = request.getProxy().createRequest(
+                    CONFERENCE_URI_PREFIX + "@" + request.getHeader("Host"), "INVITE");
+            conferenceInvite.addHeader("Contact", participantContact);
+            conferenceInvite.addHeader("Route", "<sip:" + participantContact + ">");
+            conferenceInvite.setContent(request.getContent(), request.getContentType());
+            conferenceInvite.send();
+        } catch (ServletException | IOException e) {
+            e.printStackTrace();
+        }
+    }
+    
+
+    private void handleConferenceCall(SipServletRequest request) {
+        try {
+            SipSessionsUtil sessionsUtil = (SipSessionsUtil) getServletContext().getAttribute(SIP_SESSIONS_UTIL);
+            SipSession sipSession = sessionsUtil.getCorrespondingSipSession(request);
+
+            // Forward INVITE to all participants in the conference
+            Set<SipSession> conferenceParticipants = sessionsUtil.getActiveSessions(sipSession.getApplicationSession());
+            for (SipSession participant : conferenceParticipants) {
+                if (!participant.equals(sipSession)) {
+                    String conferenceRoom = determineConferenceRoom(request.getRequestURI().toString());
+                    SipServletRequest participantInvite = participant.createRequest("INVITE");
+                    participantInvite.addHeader("Route", "<sip:" + CONFERENCE_URI_PREFIX + "@" + request.getHeader("Host") + ">");
+                    participantInvite.addHeader("Contact", CONFERENCE_ROOM_PREFIX + conferenceRoom);
+                    participantInvite.send();
+                }
+            }
+
+            // Respond to the original INVITE request
+            SipServletResponse response = request.createResponse(200);
+            response.send();
+        } catch (ServletException | IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+		private String determineConferenceRoom(String uri) {
+			// Extract the conference room identifier from the URI
+			// You might want to implement a more sophisticated logic based on your requirements
+			return uri.substring(CONFERENCE_URI_PREFIX.length() + 1);
+		}
+
+		private boolean isConferenceCall(String uri) {
+			// Check if the URI corresponds to a conference call
+			return uri.startsWith(CONFERENCE_URI_PREFIX);
+		}
+
+
 	
 	/**
         * Auxiliary function for extracting SPI URIs
@@ -243,4 +312,6 @@ public class Myapp extends SipServlet {
 		String f = uri.substring(uri.indexOf("<")+1, uri.indexOf(">"));
 		return f;
 	}
+
+
 }
