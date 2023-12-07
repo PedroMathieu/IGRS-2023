@@ -20,11 +20,23 @@ import javax.servlet.sip.SipFactory;
  */
 public class Myapp extends SipServlet {
 
+	private String contact;
+    private String state;
+
+    public ContactInfo(String contact, String state) {
+        this.contact = contact;
+        this.state = state;
+    }
+
+	public String getState(){
+		return state;
+	}
+
 	/**
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	static private Map<String, String> RegistrarDB;
+	static private Map<String, ContactInfo> RegistrarDB;
 	static private SipFactory factory;
 	
 	public Myapp() {
@@ -160,15 +172,39 @@ public class Myapp extends SipServlet {
         */
 	protected void doInvite(SipServletRequest request)
                   throws ServletException, IOException {
+
+			String recipientAor = getSIPuri(request.getHeader("To"));
+			String recipientDomain = recipientAor.substring(recipientAor.indexOf("@") + 1);
+			SipServletResponse response;
+
+			if(domain.equals("acme.pt")){
+				if(!RegistrarDB.containsKey(aor)){
+					response = request.createResponse(404);
+					response.send();
+				}else{
+					Proxy proxy = request.getProxy();
+					proxy.setRecordRoute(false);
+					proxy.setSupervised(false);
+
+					ContactInfo contactInfo = RegistrarDB.get(aor);
+					URI toContact = factory.createURI(contactInfo.getContact());
+					proxy.proxyTo(toContact);
+					log("INVITE (myapp): AOR " + aor + " is selected with state: " + contactInfo.getState());
+				}
+				} else {
+			Proxy proxy = request.getProxy();
+			proxy.proxyTo(request.getRequestURI());
+		}
+			}
 		
 		// Some logs to show the content of the Registrar database.
-		log("INVITE (myapp):***");
+		/* log("INVITE (myapp):***");
 		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
     		while (it.hasNext()) {
         		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
         		System.out.println(pairs.getKey() + " = " + pairs.getValue());
     		}
-		log("INVITE (myapp):***");
+		log("INVITE (myapp):***"); */
 		
 		/*
 		String aor = getSIPuri(request.getHeader("To")); // Get the To AoR
@@ -186,12 +222,12 @@ public class Myapp extends SipServlet {
 		response.send();
 		*/
 		
-		String aor = getSIPuri(request.getHeader("To")); // Get the To AoR
+		/* String aor = getSIPuri(request.getHeader("To")); // Get the To AoR
 		String domain = aor.substring(aor.indexOf("@")+1, aor.length());
 		log(domain);
 		if (domain.equals("a.pt")) { // The To domain is the same as the server 
 	    	if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
-				SipServletResponse response; 
+				/* SipServletResponse response; 
 				response = request.createResponse(404);
 				response.send();
 	    	} else {
@@ -205,7 +241,7 @@ public class Myapp extends SipServlet {
 			Proxy proxy = request.getProxy();
 			proxy.proxyTo(request.getRequestURI());
 		}
-
+ */
 		/*
 	    if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
 			SipServletResponse response; 
@@ -217,7 +253,7 @@ public class Myapp extends SipServlet {
 			response.setHeader("Contact",RegistrarDB.get(aor));
 			response.send();
 		}
-		*/
+		
 	}
 	
 	/**
