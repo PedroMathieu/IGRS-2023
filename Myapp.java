@@ -1,4 +1,3 @@
-
 /*
  * $Id: EchoServlet.java,v 1.5 2003/06/22 12:32:15 fukuda Exp $
  */
@@ -22,11 +21,13 @@ public class Myapp extends SipServlet {
 
 	private String contact;
     private String state;
+	private boolean inRestrictedGroup;
 
-    public ContactInfo(String contact, String state) {
+    public ContactInfo(String contact, String state, boolean inRestrictedGroup) {
         this.contact = contact;
         this.state = state;
-    }
+		this.inRestrictedGroup = inRestrictedGroup;   
+	}
 
 	public String getState(){
 		return state;
@@ -39,6 +40,10 @@ public class Myapp extends SipServlet {
 	public void setState(String state) {
         this.state = state;
     }
+
+	public boolean getGroup(){
+		return inRestrictedGroup;
+	}
 
 	/**
 	 * 
@@ -179,35 +184,66 @@ public class Myapp extends SipServlet {
         * - 404 if not registred
         * @param  request The SIP message received by the AS 
         */
-	protected void doInvite(SipServletRequest request)
-                  throws ServletException, IOException {
-
+		protected void doInvite(SipServletRequest request) throws ServletException, IOException {
 			String recipientAor = getSIPuri(request.getHeader("To"));
 			String recipientDomain = recipientAor.substring(recipientAor.indexOf("@") + 1);
 			SipServletResponse response;
 
-			if(domain.equals("acme.pt")){
-				if(!RegistrarDB.containsKey(aor)){
-					response = request.createResponse(404);
+			ContactInfo senderContactInfo = RegistrarDB.get(senderAor);
+			boolean isSenderInRestrictedGroup = senderContactInfo != null && senderContactInfo.getGroup();
+
+			if (!isSenderInRestrictedGroup) {
+				// Utilizador de origem não pertence ao grupo, envia resposta SIP indicando a não disponibilidade do serviço
+				response = request.createResponse(403); 
+				response.send();
+				return;
+			}
+
+			if (!isValidDomain(recipientAor) || !"acme.pt".equals(recipientDomain)) {
+				// Conteúdo da mensagem não é um AoR ou AoR não corresponde ao domínio acme.pt
+				response = request.createResponse(400); // Código 400 - Pedido Incorreto
+				response.send();
+				return;
+			}
+		
+		
+			if ("acme.pt".equals(recipientDomain)) {
+
+				ContactInfo recipientContactInfo = RegistrarDB.get(recipientAor);
+				String userState = recipientContactInfo.getState();
+
+				if (!RegistrarDB.containsKey(recipientAor) || userState.equals("Não registado") || userState.equals("Ocupado")|| userState.equals("Em conferência")) {
+
+					response = request.createResponse(200);
+					response.getPrintWriter().println("Estado do usuário alvo: " + userState);
 					response.send();
-				}else{
-					
-					Proxy proxy = request.getProxy();
-					proxy.setRecordRoute(false);
-					proxy.setSupervised(false);
 
-					ContactInfo contactInfo = RegistrarDB.get(recipientAor);
-					URI toContact = factory.createURI(contactInfo.getContact());
-
-					proxy.proxyTo(toContact);
-					log("INVITE (myapp): AOR " + aor + " is selected with state: " + contactInfo.getState());
+				} else {
+					// O código abaixo envia uma mensagem de convite indireto para "gofind@acme.pt"
+					String indirectRecipientAor = "gofind@acme.pt";
+					if (RegistrarDB.containsKey(indirectRecipientAor)) {
+						Proxy proxy = request.getProxy();
+						proxy.setRecordRoute(false);
+						proxy.setSupervised(false);
+						
+						// Obtém as informações de contato do destinatário indireto
+						ContactInfo indirectRecipientContactInfo = RegistrarDB.get(indirectRecipientAor);
+						URI indirectRecipientContactURI = factory.createURI(indirectRecipientContactInfo.getContact());
+						
+						// Define o destino da mensagem de convite indireto
+						proxy.proxyTo(indirectRecipientContactURI);
+					} else {
+						// O destinatário indireto não está registrado, você pode lidar com isso conforme necessário
+					}
 				}
+		
+				// Restante da lógica do método...
 			} else {
+				// Domínio de destino não é "acme.pt"
 				Proxy proxy = request.getProxy();
 				proxy.proxyTo(request.getRequestURI());
-			}	
+			}
 		}
-		
 		// Some logs to show the content of the Registrar database.
 		/* log("INVITE (myapp):***");
 		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
