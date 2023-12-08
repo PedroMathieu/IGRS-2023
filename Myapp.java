@@ -83,22 +83,21 @@ public class Myapp extends SipServlet {
 		log(domain);
 		if (domain.equals("a.pt")) { // The To domain is the same as the server 
 	    	if (!RegistrarDB.containsKey(toAor)) { // To AoR not in the database, reply 404
-				log("ja bu sabi");
 				SipServletResponse response = request.createResponse(404);
 				response.send();
 	    	} else {
-				log("ja bu sabi 2");
 				if (isSessionEstablished(toAor, fromAor)) {
-                	setStatus(toAor, "BUSY");
-                	setStatus(fromAor, "BUSY");
-					SipServletResponse response = request.createResponse(486);
+                	SipServletResponse response = request.createResponse(486);
                 	response.send();
             	} else {
+					log("ja bu sabi 3");
                 	Proxy proxy = request.getProxy();
                 	proxy.setRecordRoute(false);
                 	proxy.setSupervised(false);
                 	URI toContact = factory.createURI(RegistrarDB.get(toAor));
                 	proxy.proxyTo(toContact);
+					
+					addSession(toAor, fromAor);
            		}
 			}			
 		} else {
@@ -106,6 +105,17 @@ public class Myapp extends SipServlet {
         	response.send();
 		}
 
+	}
+
+	protected void doBye(SipServletRequest request) throws ServletException, IOException {
+    	String fromAor = getSIPuri(request.getHeader("From"));
+    	String toAor = getSIPuri(request.getHeader("To"));
+
+		log("ja bu sabi 4");
+
+    	removeSession(fromAor, toAor);
+    
+    	super.doBye(request);
 	}
 	
 	/**
@@ -140,9 +150,13 @@ public class Myapp extends SipServlet {
         return sessions.containsKey(key1) || sessions.containsKey(key2);
     }
 
-    public void addSession(String user) {
-    	String key = user;
-    	sessions.put(key, "active");
+    public void addSession(String user1, String user2) {
+    	String key1 = user1;
+        String key2 = user2;
+    	sessions.put(key1, "active");
+		sessions.put(key2, "active");
+		setStatus(user1, "BUSY");
+        setStatus(user2, "BUSY");
     }
 
     public void removeSession(String user1, String user2) {
@@ -150,6 +164,8 @@ public class Myapp extends SipServlet {
     	String key2 = user2;
     	sessions.remove(key1);
     	sessions.remove(key2);
+		setStatus(user1, "AVAILABLE");
+        setStatus(user2, "AVAILABLE");
     }
 
 	public Map<String, String> userStatusMap = new HashMap<>();
@@ -159,7 +175,7 @@ public class Myapp extends SipServlet {
     }
 
 	public String getStatus(String user) {
-    	return userStatusMap.getOrDefault(user, "UNKNOWN");
+    	return userStatusMap.get(user);
     }
 
 
