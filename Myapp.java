@@ -23,13 +23,48 @@ public class Myapp extends SipServlet {
 	/**
 	 * 
 	 */
+	 
 	private static final long serialVersionUID = 1L;
-	static private Map<String, String> RegistrarDB;
+	static private Map<String, ContactInfo> RegistrarDB;
 	static private SipFactory factory;
-	
+
+	// Pedro
+	private static final String SIP_SESSIONS_UTIL = "javax.servlet.sip.SipSessionsUtil";
+	private static SipSessionsUtil sessionsUtil;
+	private static final String CONFERENCE_URI = "sip:conference";
+    private static final String CONFERENCE_ROOM = "conference_";
+	//
+
+	// Góis
+	private String contact;
+	private String state;
+
+	public ContactInfo(String contact, String state) {
+        this.contact = contact;
+        this.state = state;
+    }
+
+	public String getState(){
+		return state;
+	}
+
+	public void setState(String state) {
+        this.state = state;
+    }
+
+	public String getContact() {
+        return contact;
+    }
+	//
+
 	public Myapp() {
 		super();
-		RegistrarDB = new HashMap<String,String>();
+		RegistrarDB = new HashMap<String,ContactInfo>();
+		
+		// Pedro
+		sessionsUtil = (SipSessionsUtil) getServletContext().getAttribute(SIP_SESSIONS_UTIL);
+		//
+
 	}
 	
 	public void init() {
@@ -37,7 +72,7 @@ public class Myapp extends SipServlet {
 	}
 
 	/**
-	 	* Acs as a desregistar service para as DEREGISTER messages
+	 	* Acs as a desregistar service for DEREGISTER messages
 	 	* @param request
 	 	*/
 	protected void doDeregister(SipServletRequest request) throws ServletException, 
@@ -79,28 +114,7 @@ public class Myapp extends SipServlet {
 			IOException {
 
 		String to = request.getHeader("To");
-		log("To: " + to); //
-
-		String aux = getSIPuri(to); // Optional
-		log("Aux: " + aux); //
-
-		String aux1 = getSIPuriPort(to); // Optional
-		log("Aux1: " + aux1); //
-
-		String contact1 = request.getHeader("Contact"); // Optional
-		log("Contact1: " + contact1); //
-
-		String aux2 = getSIPuri(contact1); // Optional
-		log("Aux2: " + aux2); //
-
-		String aux3 = getSIPuriPort(contact1); // Optional
-		log("Aux3: " + aux3); //
-
-		// String aor = getSIPuri(request.getHeader("To"));
-		// log("Aor: " + aor); 
-
 		String contact = getSIPuriPort(request.getHeader("Contact"));
-	    log("Contact: " + contact); //
 
 		SipServletResponse response; // Criamos uma resposta
 
@@ -109,7 +123,8 @@ public class Myapp extends SipServlet {
 			String domain = aor.substring(aor.indexOf("@") + 1); // Obtemos o domain (O que está a seguir ao  único '@')
 
 			if ("acme.pt".equals(domain)) { // Se o domain corresponder a "acme.pt"
-				RegistrarDB.put(aor, contact); // Adiciona à bd
+				// RegistrarDB.put(aor, contact); // Adiciona à bd
+				RegistrarDB.put(aor, new ContactInfo(contact, "Disponivel")); // Adiciona à bd introduzindo o estado 'online'
 				response = request.createResponse(200); // Resposta 200 (Sucess response)
 				response.send(); // Envia a mensagem
 
@@ -122,11 +137,6 @@ public class Myapp extends SipServlet {
 			response = request.createResponse(400); // Resposta 400 (Bad response)
 			response.send(); // Envia mensagem
 		}
-
-		//RegistrarDB.put(aor, contact); // Adiciona à bd
-		//SipServletResponse response; 
-		//response = request.createResponse(200);
-		//response.send();
 		
 	    // Some logs to show the content of the Registrar database.
 		log("REGISTER (myapp):***");
@@ -169,56 +179,124 @@ public class Myapp extends SipServlet {
         		System.out.println(pairs.getKey() + " = " + pairs.getValue());
     		}
 		log("INVITE (myapp):***");
-		
-		/*
-		String aor = getSIPuri(request.getHeader("To")); // Get the To AoR
-	    if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
-			SipServletResponse response; 
-			response = request.createResponse(404);
-			response.send();
-	    } else {
-			SipServletResponse response = request.createResponse(300);
-			// Get the To AoR contact from the database and add it to the response 
-			response.setHeader("Contact",RegistrarDB.get(aor));
-			response.send();
-		}
-		SipServletResponse response = request.createResponse(404);
-		response.send();
-		*/
-		
-		String aor = getSIPuri(request.getHeader("To")); // Get the To AoR
-		String domain = aor.substring(aor.indexOf("@")+1, aor.length());
-		log(domain);
-		if (domain.equals("a.pt")) { // The To domain is the same as the server 
-	    	if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
-				SipServletResponse response; 
-				response = request.createResponse(404);
-				response.send();
-	    	} else {
-				Proxy proxy = request.getProxy();
-				proxy.setRecordRoute(false);
-				proxy.setSupervised(false);
-				URI toContact = factory.createURI(RegistrarDB.get(aor));
-				proxy.proxyTo(toContact);
-			}			
-		} else {
-			Proxy proxy = request.getProxy();
-			proxy.proxyTo(request.getRequestURI());
-		}
 
-		/*
-	    if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
-			SipServletResponse response; 
-			response = request.createResponse(404);
-			response.send();
-	    } else {
-			SipServletResponse response = request.createResponse(300);
-			// Get the To AoR contact from the database and add it to the response 
-			response.setHeader("Contact",RegistrarDB.get(aor));
-			response.send();
+		// Pedro
+		String to = request.getHeader("To");
+
+		SipServletResponse response;
+		
+		if (isValidDomain(to)) {  // Verifica se o domain do "To" é válido (Se só tem um '@')
+			String aor = getSIPuri(request.getHeader("To")); // Obtemos o Aor (Adress-Of-Record)
+			String domain = aor.substring(aor.indexOf("@") + 1); // Obtemos o domain (O que está a seguir ao  único '@') 
+
+			if ("acme.pt".equals(domain)) { // Verifica se o dominio corresponde ao pretendido
+
+				if (!RegistrarDB.containsKey(aor)) { // Caso o Aor não exista na bd
+					response = request.createResponse(404); // 404 (Not found response)
+					response.send(); // Envia a mensagem
+				
+				} else { // Se o Aor existe na bd
+
+					// Gois
+					ContactInfo participantInfo = RegistrarDB.get(aor); // Obtemos a informação 
+					//
+
+					if (participantInfo.getState() == "Disponivel") { // Se o estado for "Disponivel"
+						Proxy proxy = request.getProxy();
+						proxy.setRecordRoute(false);
+						proxy.setSupervised(false);
+						URI toContact = factory.createURI(RegistrarDB.get(aor));
+						proxy.proxyTo(toContact);
+
+						if (isConferenceCall(request.getRequestURI().toString())) { // Se o URI corresponde a uma conferência
+							String conferenceRoom = determineConferenceRoom(request.getRequestURI().toString()); // Obtemos o identificador da sala de conferência
+							addParticipantToConference(request, toContact, conferenceRoom); // Adicionamos o user à conferência
+						}
+
+					} else { // Caso o user não esteja disponivel
+						response.createResponse(486); // 486 (Busy response)
+						response.send(); // Envia mensagem
+					}
+				}
+					
+			} else if (request.getRequestURI.toString().startsWith(CONFERENCE_URI)) { // Se o URI corresponde à conferência
+				handleConferenceCall(request); // É tratado por esta função
+			
+			} else { // Se o dominio não corresponder ao pretendido
+				response = request.createResponse(403); // Resposta 403 (Forbbiden response)
+				response.send(); // Envia mensagem
+			}
+
+		} else { // Se o domain não for válido
+			response = request.createResponse(400); // Resposta 400 (Bad response)
+			response.send(); // Envia mensagem
 		}
-		*/
+		//
 	}
+
+	// Pedro
+	private void addParticipantToConference(SipServletRequest request, String participantContact, String conferenceRoom) {
+		try {
+			SipSessionsUtil sessionsUtil = (SipSessionsUtil) getServletContext().getAttribute(SIP_SESSIONS_UTIL);
+            SipApplicationSession sipApplicationSession = request.getApplicationSession();
+            SipSession sipSession = sessionsUtil.createSipSession(sipApplicationSession);
+            sipSession.setAttribute(CONFERENCE_ROOM + conferenceRoom, conferenceRoom); 
+
+			SipServletRequest conferenceInvite = request.getProxy().createRequest(
+                    CONFERENCE_URI + "@" + request.getHeader("Host"), "INVITE");
+            conferenceInvite.addHeader("Contact", participantContact);
+            conferenceInvite.addHeader("Route", "<sip:" + participantContact + ">");
+            conferenceInvite.setContent(request.getContent(), request.getContentType());
+            conferenceInvite.send();
+
+			// Gois
+			String participantAor = getSIPuri(participantContact);
+			ContactInfo participantInfo = RegistrarDB.get(participantAor);
+			participantInfo.setState("Em conferência");
+			//
+
+		} catch (ServletException | IOException e) {
+            e.printStackTrace();
+        }
+	}
+	//
+
+	// Pedro
+	private void handleConferenceCall(SipServletRequest request) {
+        try {
+            SipSessionsUtil sessionsUtil = (SipSessionsUtil) getServletContext().getAttribute(SIP_SESSIONS_UTIL);
+            SipSession sipSession = sessionsUtil.getCorrespondingSipSession(request);
+
+            // Forward INVITE to all participants in the conference
+            Set<SipSession> conferenceParticipants = sessionsUtil.getActiveSessions(sipSession.getApplicationSession());
+            for (SipSession participant : conferenceParticipants) {
+                if (!participant.equals(sipSession)) {
+                    String conferenceRoom = determineConferenceRoom(request.getRequestURI().toString());
+                    SipServletRequest participantInvite = participant.createRequest("INVITE");
+                    participantInvite.addHeader("Route", "<sip:" + CONFERENCE_URI + "@" + request.getHeader("Host") + ">");
+                    participantInvite.addHeader("Contact", CONFERENCE_ROOM + conferenceRoom);
+                    participantInvite.send();
+                }
+            }
+
+            // Respond to the original INVITE request
+            SipServletResponse response = request.createResponse(200);
+            response.send();
+        } catch (ServletException | IOException e) {
+            e.printStackTrace();
+        }
+    }
+	//
+
+	// Pedro
+	private String determineConferenceRoom(String uri) { // Através do URI
+		return uri.substring(CONFERENCE_URI.length() + 1); // Obtemos o identificador da sala de conferência
+	}
+
+	private boolean isConferenceCall(String uri) { // Através do URI
+		return uri.startsWith(CONFERENCE_URI); // Verificamos se o URI corresponde ao da confereência
+	}
+	//
 	
 	/**
         * Auxiliary function for extracting SPI URIs
