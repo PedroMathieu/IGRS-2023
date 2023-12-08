@@ -21,12 +21,10 @@ public class Myapp extends SipServlet {
 
 	private String contact;
     private String state;
-	private boolean inRestrictedGroup;
 
-    public ContactInfo(String contact, String state, boolean inRestrictedGroup) {
+    public ContactInfo(String contact, String state) {
         this.contact = contact;
         this.state = state;
-		this.inRestrictedGroup = inRestrictedGroup;   
 	}
 
 	public String getState(){
@@ -40,10 +38,6 @@ public class Myapp extends SipServlet {
 	public void setState(String state) {
         this.state = state;
     }
-
-	public boolean getGroup(){
-		return inRestrictedGroup;
-	}
 
 	/**
 	 * 
@@ -190,14 +184,6 @@ public class Myapp extends SipServlet {
 			SipServletResponse response;
 
 			ContactInfo senderContactInfo = RegistrarDB.get(senderAor);
-			boolean isSenderInRestrictedGroup = senderContactInfo != null && senderContactInfo.getGroup();
-
-			if (!isSenderInRestrictedGroup) {
-				// Utilizador de origem não pertence ao grupo, envia resposta SIP indicando a não disponibilidade do serviço
-				response = request.createResponse(403); 
-				response.send();
-				return;
-			}
 
 			if (!isValidDomain(recipientAor) || !"acme.pt".equals(recipientDomain)) {
 				// Conteúdo da mensagem não é um AoR ou AoR não corresponde ao domínio acme.pt
