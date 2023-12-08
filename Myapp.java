@@ -25,7 +25,7 @@ public class Myapp extends SipServlet {
 	 */
 	 
 	private static final long serialVersionUID = 1L;
-	static private Map<String, ContactInfo> RegistrarDB;
+	static private Map<String, List<String>> RegistrarDB;
 	static private SipFactory factory;
 
 	// Pedro
@@ -36,31 +36,23 @@ public class Myapp extends SipServlet {
 	//
 
 	// Góis
-	private String contact;
-	private String state;
-
-	public ContactInfo(String contact, String state) {
-        this.contact = contact;
-        this.state = state;
-    }
-
-	public String getState(){
-		return state;
+	public String getState(String key){
+		return RegistrarDB.get(key).get(1);
 	}
 
 	public void setState(String state) {
-        this.state = state;
+		RegistrarDB.get(key).set(1, state);
     }
 
-	public String getContact() {
-        return contact;
+	public String getContact(String key) {
+        return RegistrarDB.get(key).get(0);
     }
 	//
 
 	public Myapp() {
 		super();
-		RegistrarDB = new HashMap<String,ContactInfo>();
-		
+		RegistrarDB = new HashMap<String,List<String>>();
+
 		// Pedro
 		sessionsUtil = (SipSessionsUtil) getServletContext().getAttribute(SIP_SESSIONS_UTIL);
 		//
@@ -124,7 +116,12 @@ public class Myapp extends SipServlet {
 
 			if ("acme.pt".equals(domain)) { // Se o domain corresponder a "acme.pt"
 				// RegistrarDB.put(aor, contact); // Adiciona à bd
-				RegistrarDB.put(aor, new ContactInfo(contact, "Disponivel")); // Adiciona à bd introduzindo o estado 'online'
+				List<String> info = new ArrayList<>();
+				info.add(contact);
+				info.add("Disponivel");
+	
+				RegistrarDB.put(aor, info);
+
 				response = request.createResponse(200); // Resposta 200 (Sucess response)
 				response.send(); // Envia a mensagem
 
@@ -198,10 +195,10 @@ public class Myapp extends SipServlet {
 				} else { // Se o Aor existe na bd
 
 					// Gois
-					ContactInfo participantInfo = RegistrarDB.get(aor); // Obtemos a informação 
+					List<String> participantInfo = RegistrarDB.get(aor); // Obtemos a informação 
 					//
 
-					if (participantInfo.getState() == "Disponivel") { // Se o estado for "Disponivel"
+					if ("Disponivel".equals(participantInfo.get(1))) { // Se o estado for "Disponivel"
 						Proxy proxy = request.getProxy();
 						proxy.setRecordRoute(false);
 						proxy.setSupervised(false);
@@ -251,8 +248,9 @@ public class Myapp extends SipServlet {
 
 			// Gois
 			String participantAor = getSIPuri(participantContact);
-			ContactInfo participantInfo = RegistrarDB.get(participantAor);
-			participantInfo.setState("Em conferência");
+			List<String> participantInfo = RegistrarDB.get(participantAor); // Obtemos a informação 
+			participantInfo.set(1, "Em conferência");
+			RegistrarDB.put(participantAor, participantInfo);
 			//
 
 		} catch (ServletException | IOException e) {
