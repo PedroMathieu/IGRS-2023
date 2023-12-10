@@ -24,11 +24,19 @@ public class Myapp extends SipServlet {
 	 */
 	private static final long serialVersionUID = 1L;
 	static private Map<String, String> RegistrarDB;
+
+	static private Map<String, String> sessions;
+	//public Map<String, String> sessions = new HashMap<>();
+	static private Map<String, String> userStatusMap;
+	//public Map<String, String> userStatusMap = new HashMap<>();
+
 	static private SipFactory factory;
 	
 	public Myapp() {
 		super();
 		RegistrarDB = new HashMap<String,String>();
+		userStatusMap = new HashMap<String,String>();
+		sessions = new HashMap<String,String>();
 	}
 	
 	public void init() {
@@ -97,6 +105,7 @@ public class Myapp extends SipServlet {
 
 		if (RegistrarDB.containsKey(aor)) { // Se o "aor" existir na bd 
 			RegistrarDB.remove(aor); // Remove da bd 
+			userStatusMap.remove(aor); // Remove o estado do aor removido
 			response = request.createResponse(200); // 200 (ok response)
         	response.send(); // Envia a mensagem
 		
@@ -205,8 +214,6 @@ public class Myapp extends SipServlet {
 		return f;
 	}
 
-	public Map<String, String> sessions = new HashMap<>();
-
     public boolean isSessionEstablished(String user1, String user2) {
         String key1 = user1;
         String key2 = user2;
@@ -230,8 +237,6 @@ public class Myapp extends SipServlet {
 		setStatus(user1, "AVAILABLE");
         setStatus(user2, "AVAILABLE");
     }
-
-	public Map<String, String> userStatusMap = new HashMap<>();
 
     public void setStatus(String user, String status) {
         userStatusMap.put(user, status);
