@@ -142,22 +142,22 @@ public class Myapp extends SipServlet {
 		
 		log(domain);
 		if (domain.equals("a.pt")) { // The To domain is the same as the server 
-	    	if (!RegistrarDB.containsKey(toAor)) { // To AoR not in the database, reply 404
+			if (toAor.contains("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
+					Proxy proxy = request.getProxy();
+                	proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
+                	proxy.setSupervised(false);
+                	URI toContact = factory.createURI("sip:conf@127.0.0.1:5070");
+                	proxy.proxyTo(toContact);
+					
+					setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
+			} else if (!RegistrarDB.containsKey(toAor)) { // To AoR not in the database, reply 404
 				SipServletResponse response = request.createResponse(404);
 				response.send();
 	    	} else {
 				if (!getStatus(toAor).equals("AVAILABLE")) { // Verificar se o toAor está disponível
                 	SipServletResponse response = request.createResponse(486);
                 	response.send();
-            	} else if (toAor.equals("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
-					Proxy proxy = request.getProxy();
-                	proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
-                	proxy.setSupervised(false);
-                	URI toContact = factory.createURI(RegistrarDB.get(toAor));
-                	proxy.proxyTo(toContact);
-					
-					setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
-				} else {
+            	} else {
                 	Proxy proxy = request.getProxy();
                 	proxy.setRecordRoute(true);
                 	proxy.setSupervised(false);
@@ -179,7 +179,7 @@ public class Myapp extends SipServlet {
     	String fromAor = getSIPuri(request.getHeader("From"));
     	String toAor = getSIPuri(request.getHeader("To"));
 
-		if (toAor.equals("chat")) { // Se o toAor for chat o estado do user passa a disponivel
+		if (toAor.contains("chat")) { // Se o toAor for chat o estado do user passa a disponivel
 			setStatus(fromAor, "AVAILABLE");
 		} else {  // Para os outros casos, o estado dos dois users passa a disponivel
     		setStatus(fromAor, "AVAILABLE");
