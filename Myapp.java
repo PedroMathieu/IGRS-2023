@@ -25,6 +25,8 @@ public class Myapp extends SipServlet {
 	private static final long serialVersionUID = 1L;
 	static private Map<String, String> RegistrarDB;
 	static private SipFactory factory;
+
+	private Map<String, String> userStatusMap = new HashMap<>();
 	
 	public Myapp() {
 		super();
@@ -36,19 +38,77 @@ public class Myapp extends SipServlet {
 	}
 
 	/**
-        * Acts as a registrar and location service for REGISTER messages
+        * Acts as a registrar and deregistar and location service for REGISTER messages
+		* It chooses which operation (REGISTER or DEREGISTER) is in the SIP message received
         * @param  request The SIP message received by the AS 
-        */
+    */
 	protected void doRegister(SipServletRequest request) throws ServletException,
 			IOException {
-		String aor = getSIPuri(request.getHeader("To"));
-		String contact = getSIPuriPort(request.getHeader("Contact"));
-		RegistrarDB.put(aor, contact);
-		SipServletResponse response; 
-		response = request.createResponse(200);
-		response.send();
 		
-	    // Some logs to show the content of the Registrar database.
+		String to = request.getHeader("To"); // Obtemos o "To" do request
+    	String aor = getSIPuri(request.getHeader("To")); // Obtemos o "aor" do request
+
+		if (request.getExpires() != 0) { // Caso o valores "expires" do request seja diferente de 0 (REGISTER)
+ 			doRegistration(request, to, aor); // Efetua o registo
+
+		} else { // Caso o valores "expires" do request seja igual a 0 (DEREGISTER)
+			doDeregistration(request, aor); // Efetua o deregisto
+		}
+	}
+
+	/**
+        * This is the function that actually manages the REGISTER operation
+        * @param request The SIP message received by the AS, 
+		* @param to From the SIP message received, 
+		* @param aor From the SIP message received
+    */
+    private void doRegistration(SipServletRequest request, String to, String aor) throws ServletException, IOException {
+    	SipServletResponse response; // Cria a resposta
+
+		String domain = aor.substring(aor.indexOf("@") + 1, aor.length()); // Obtemos o "domain" do "aor"
+        String contact = getSIPuriPort(request.getHeader("Contact")); // Obtemos o "contact" do request
+
+			if ("a.pt".equals(domain)) { // O dominio corresponde ao pretendido
+				RegistrarDB.put(aor, contact); // Adcionamos à BD
+				setStatus(aor, "AVAILABLE"); // Colocamos o está do "aor" com 'AVAILABLE'
+				response = request.createResponse(200); // 200 (ok response)
+            	response.send(); // Envia a mensagem
+				
+			} else { // O dominio não corresponde ao pretendido 
+				response = request.createResponse(403); // 403 (forbidden response)
+            	response.send(); // Envia a mensagem
+			}
+
+		// Some logs to show the content of the Registrar database.
+		log("REGISTER (myapp):***");
+		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    		while (it.hasNext()) {
+        		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        		System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    		}
+		log("REGISTER (myapp):***");
+	}
+
+	/**
+        * This is the function that actually manages the DEREGISTER operation
+        * @param request The SIP message received by the AS, 
+		* @param aor From the SIP message received
+    */
+	private void doDeregistration(SipServletRequest request, String aor) throws ServletException, IOException {
+    	SipServletResponse response; // Cria a resposta
+
+		if (RegistrarDB.containsKey(aor)) { // Se o "aor" existir na bd 
+			RegistrarDB.remove(aor); // Remove da bd 
+			userStatusMap.remove(aor); // Remove o estado do aor removido
+			response = request.createResponse(200); // 200 (ok response)
+        	response.send(); // Envia a mensagem
+		
+		} else { // Se o "aor" não existir na bd
+			response = request.createResponse(403); // 403 (forbidden response)
+        	response.send(); // Envia a mensagem
+		}
+
+		// Some logs to show the content of the Registrar database.
 		log("REGISTER (myapp):***");
 		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
     		while (it.hasNext()) {
@@ -86,18 +146,26 @@ public class Myapp extends SipServlet {
 				SipServletResponse response = request.createResponse(404);
 				response.send();
 	    	} else {
-				if (isSessionEstablished(toAor, fromAor)) {
+				if (!getStatus(toAor).equals("AVAILABLE")) { // Verificar se o toAor está disponível
                 	SipServletResponse response = request.createResponse(486);
                 	response.send();
-            	} else {
-					log("ja bu sabi 3");
-                	Proxy proxy = request.getProxy();
-                	proxy.setRecordRoute(false);
+            	} else if (toAor.equals("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
+					Proxy proxy = request.getProxy();
+                	proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
                 	proxy.setSupervised(false);
                 	URI toContact = factory.createURI(RegistrarDB.get(toAor));
                 	proxy.proxyTo(toContact);
 					
-					addSession(toAor, fromAor);
+					setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
+				} else {
+                	Proxy proxy = request.getProxy();
+                	proxy.setRecordRoute(true);
+                	proxy.setSupervised(false);
+                	URI toContact = factory.createURI(RegistrarDB.get(toAor));
+                	proxy.proxyTo(toContact);
+					
+					setStatus(fromAor, "BUSY");
+					setStatus(toAor, "BUSY");
            		}
 			}			
 		} else {
@@ -111,9 +179,12 @@ public class Myapp extends SipServlet {
     	String fromAor = getSIPuri(request.getHeader("From"));
     	String toAor = getSIPuri(request.getHeader("To"));
 
-		log("ja bu sabi 4");
-
-    	removeSession(fromAor, toAor);
+		if (toAor.equals("chat")) { // Se o toAor for chat o estado do user passa a disponivel
+			setStatus(fromAor, "AVAILABLE");
+		} else {  // Para os outros casos, o estado dos dois users passa a disponivel
+    		setStatus(fromAor, "AVAILABLE");
+			setStatus(toAor, "AVAILABLE");
+		}
     
     	super.doBye(request);
 	}
@@ -142,39 +213,11 @@ public class Myapp extends SipServlet {
 		return f;
 	}
 
-	public Map<String, String> sessions = new HashMap<>();
-
-    public boolean isSessionEstablished(String user1, String user2) {
-        String key1 = user1;
-        String key2 = user2;
-        return sessions.containsKey(key1) || sessions.containsKey(key2);
-    }
-
-    public void addSession(String user1, String user2) {
-    	String key1 = user1;
-        String key2 = user2;
-    	sessions.put(key1, "active");
-		sessions.put(key2, "active");
-		setStatus(user1, "BUSY");
-        setStatus(user2, "BUSY");
-    }
-
-    public void removeSession(String user1, String user2) {
-    	String key1 = user1;
-    	String key2 = user2;
-    	sessions.remove(key1);
-    	sessions.remove(key2);
-		setStatus(user1, "AVAILABLE");
-        setStatus(user2, "AVAILABLE");
-    }
-
-	public Map<String, String> userStatusMap = new HashMap<>();
-
-    public void setStatus(String user, String status) {
+    private void setStatus(String user, String status) {
         userStatusMap.put(user, status);
     }
 
-	public String getStatus(String user) {
+	private String getStatus(String user) {
     	return userStatusMap.get(user);
     }
 
