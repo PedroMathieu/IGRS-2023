@@ -82,13 +82,13 @@ public class Myapp extends SipServlet {
 			}
 
 		// Some logs to show the content of the Registrar database.
-		log("REGISTER (myapp):***");
-		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
-    		while (it.hasNext()) {
-        		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
-        		System.out.println(pairs.getKey() + " = " + pairs.getValue());
-    		}
-		log("REGISTER (myapp):***");
+		log("----------------------------------------------REGISTER (myapp):----------------------------------------------");
+			Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    			while (it.hasNext()) {
+        			Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        			System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    			}
+		log("----------------------------------------------REGISTER (myapp):----------------------------------------------");
 	}
 
 	/**
@@ -111,13 +111,13 @@ public class Myapp extends SipServlet {
 		}
 
 		// Some logs to show the content of the Registrar database.
-		log("----------------------------------------------DEREGISTER (myapp):***------------------------------------------------------");
-		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
-    		while (it.hasNext()) {
-        		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
-        		System.out.println(pairs.getKey() + " = " + pairs.getValue());
-    		}
-		log("----------------------------------------------DEREGISTER (myapp):***------------------------------------------------------");
+		log("----------------------------------------------DEREGISTER (myapp):----------------------------------------------");
+			Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    			while (it.hasNext()) {
+        			Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        			System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    			}
+		log("----------------------------------------------DEREGISTER (myapp):----------------------------------------------");
 	}
 
 	/**
@@ -127,39 +127,43 @@ public class Myapp extends SipServlet {
         * @param  request The SIP message received by the AS 
         */
 	protected void doInvite(SipServletRequest request)
-                  throws ServletException, IOException {
+            throws ServletException, IOException {
 		
 		String fromAor = getSIPuri(request.getHeader("From")); // Get the From AoR
 		String toAor = getSIPuri(request.getHeader("To")); // Get the To AoR
 		String domain = toAor.substring(toAor.indexOf("@")+1, toAor.length());
 		
 		// Some logs to show the content of the Registrar database.
-		log("INVITE (myapp):***");
-		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
-    		while (it.hasNext()) {
-        		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
-        		System.out.println(pairs.getKey() + " = " + pairs.getValue());
-    		}
-		log("INVITE (myapp):***");
+		log("----------------------------------------------INVITE (myapp):----------------------------------------------");
+			Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    			while (it.hasNext()) {
+        			Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        			System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    			}
+		log("----------------------------------------------INVITE (myapp):----------------------------------------------");
 		
-		log(domain);
 		if (domain.equals("a.pt")) { // The To domain is the same as the server 
 			if (toAor.contains("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
-					Proxy proxy = request.getProxy();
-                	proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
-                	proxy.setSupervised(false);
-                	URI toContact = factory.createURI("sip:conf@127.0.0.1:5070");
-                	proxy.proxyTo(toContact);
+				Proxy proxy = request.getProxy();
+                proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
+                proxy.setSupervised(false);
+                URI toContact = factory.createURI("sip:conf@127.0.0.1:5070");
+                proxy.proxyTo(toContact);
 					
-					setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
+				setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
+
 			} else if (!RegistrarDB.containsKey(toAor)) { // To AoR not in the database, reply 404
 				SipServletResponse response = request.createResponse(404);
 				response.send();
+
 	    	} else {
+
 				if (!getStatus(toAor).equals("AVAILABLE")) { // Verificar se o toAor está disponível
                 	SipServletResponse response = request.createResponse(486);
                 	response.send();
+
             	} else {
+
                 	Proxy proxy = request.getProxy();
                 	proxy.setRecordRoute(true);
                 	proxy.setSupervised(false);
@@ -169,7 +173,8 @@ public class Myapp extends SipServlet {
 					setStatus(fromAor, "BUSY");
 					setStatus(toAor, "BUSY");
            		}
-			}			
+			}		
+
 		} else {
 			SipServletResponse response = request.createResponse(403);
         	response.send();
@@ -188,12 +193,12 @@ public class Myapp extends SipServlet {
 
 		if (toAor.contains("chat")) { // Se o toAor for chat o estado do user passa a disponivel
 			setStatus(fromAor, "AVAILABLE");
+
 		} else {  // Para os outros casos, o estado dos dois users passa a disponivel
+		
     		setStatus(fromAor, "AVAILABLE");
 			setStatus(toAor, "AVAILABLE");
 		}
-    
-    	super.doBye(request);
 	}
 	
 	/**
@@ -226,10 +231,7 @@ public class Myapp extends SipServlet {
         * @return expires value 
     	*/
 	protected String getPortExpires(String uri) {
-		String string = uri.substring(uri.indexOf(";")+1, uri.length()); // Obtemos o header d
-		String expirePlusValue = string.substring(string.indexOf(";")+1, string.length()); // Obtemos por exemplo "expires:3600"
-		String value = expirePlusValue.substring(expirePlusValue.indexOf("=")+1, expirePlusValue.length()); // Obtemos por exemplo "3600" em string
-
+		String value = uri.substring(uri.indexOf("=")+1, uri.length()); // Apartir do uir "<sip:alice@a.pt:5555>;expires=3600" obtemos "3600" em string
 		return value;
 	}
 
@@ -249,6 +251,4 @@ public class Myapp extends SipServlet {
 	private String getStatus(String user) {
     	return userStatusMap.get(user);
     }
-
-
 }
