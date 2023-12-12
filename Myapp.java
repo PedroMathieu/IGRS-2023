@@ -24,17 +24,13 @@ public class Myapp extends SipServlet {
 	 */
 	private static final long serialVersionUID = 1L;
 	static private Map<String, String> RegistrarDB;
-
-	static private Map<String, String> sessions;
-	static private Map<String, String> userStatusMap;
-
 	static private SipFactory factory;
+
+	private Map<String, String> userStatusMap = new HashMap<>();
 	
 	public Myapp() {
 		super();
 		RegistrarDB = new HashMap<String,String>();
-		userStatusMap = new HashMap<String,String>();
-		sessions = new HashMap<String,String>();
 	}
 	
 	public void init() {
@@ -45,7 +41,7 @@ public class Myapp extends SipServlet {
         * Acts as a registrar and deregistar and location service for REGISTER messages
 		* It chooses which operation (REGISTER or DEREGISTER) is in the SIP message received
         * @param  request The SIP message received by the AS 
-    */
+    	*/
 	protected void doRegister(SipServletRequest request) throws ServletException,
 			IOException {
 		
@@ -67,7 +63,7 @@ public class Myapp extends SipServlet {
         * @param request The SIP message received by the AS, 
 		* @param to From the SIP message received, 
 		* @param aor From the SIP message received
-    */
+    	*/
 	private void doRegistration(SipServletRequest request, String to, String aor) throws ServletException, IOException {
     	SipServletResponse response; // Cria a resposta
 
@@ -99,7 +95,7 @@ public class Myapp extends SipServlet {
         * This is the function that actually manages the DEREGISTER operation
         * @param request The SIP message received by the AS, 
 		* @param aor From the SIP message received
-    */
+    	*/
 	private void doDeregistration(SipServletRequest request, String aor) throws ServletException, IOException {
     	SipServletResponse response; // Cria a resposta
 
@@ -125,19 +121,13 @@ public class Myapp extends SipServlet {
 	}
 
 	/**
-		RUI ANDRÉ JESUS
-		COMENTA O TEU
-		CÓDIGO... JÁAAAAAAAA 
-	*/
-
-	/**
         * Sends SIP replies to INVITE messages
         * - 300 if registred
         * - 404 if not registred
         * @param  request The SIP message received by the AS 
-    */
+        */
 	protected void doInvite(SipServletRequest request)
-            throws ServletException, IOException {
+                  throws ServletException, IOException {
 		
 		String fromAor = getSIPuri(request.getHeader("From")); // Get the From AoR
 		String toAor = getSIPuri(request.getHeader("To")); // Get the To AoR
@@ -154,38 +144,54 @@ public class Myapp extends SipServlet {
 		
 		log(domain);
 		if (domain.equals("a.pt")) { // The To domain is the same as the server 
-	    	if (!RegistrarDB.containsKey(toAor)) { // To AoR not in the database, reply 404
+			if (toAor.contains("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
+					Proxy proxy = request.getProxy();
+                	proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
+                	proxy.setSupervised(false);
+                	URI toContact = factory.createURI("sip:conf@127.0.0.1:5070");
+                	proxy.proxyTo(toContact);
+					
+					setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
+			} else if (!RegistrarDB.containsKey(toAor)) { // To AoR not in the database, reply 404
 				SipServletResponse response = request.createResponse(404);
 				response.send();
 	    	} else {
-				if (isSessionEstablished(toAor, fromAor)) {
+				if (!getStatus(toAor).equals("AVAILABLE")) { // Verificar se o toAor está disponível
                 	SipServletResponse response = request.createResponse(486);
                 	response.send();
             	} else {
-					log("ja bu sabi 3");
                 	Proxy proxy = request.getProxy();
-                	proxy.setRecordRoute(false);
+                	proxy.setRecordRoute(true);
                 	proxy.setSupervised(false);
                 	URI toContact = factory.createURI(RegistrarDB.get(toAor));
                 	proxy.proxyTo(toContact);
 					
-					addSession(toAor, fromAor);
+					setStatus(fromAor, "BUSY");
+					setStatus(toAor, "BUSY");
            		}
-			}	
-
+			}			
 		} else {
 			SipServletResponse response = request.createResponse(403);
         	response.send();
 		}
+
 	}
 
+	/**
+        * This is the function that actually manages the BYE operation
+        * @param fromAor From the SIP message received, 
+		* @param toAor From the SIP message received
+    	*/
 	protected void doBye(SipServletRequest request) throws ServletException, IOException {
     	String fromAor = getSIPuri(request.getHeader("From"));
     	String toAor = getSIPuri(request.getHeader("To"));
 
-		log("ja bu sabi 4");
-
-    	removeSession(fromAor, toAor);
+		if (toAor.contains("chat")) { // Se o toAor for chat o estado do user passa a disponivel
+			setStatus(fromAor, "AVAILABLE");
+		} else {  // Para os outros casos, o estado dos dois users passa a disponivel
+    		setStatus(fromAor, "AVAILABLE");
+			setStatus(toAor, "AVAILABLE");
+		}
     
     	super.doBye(request);
 	}
@@ -194,7 +200,7 @@ public class Myapp extends SipServlet {
         * Auxiliary function for extracting SPI URIs
         * @param  uri A URI with optional extra attributes 
         * @return SIP URI 
-    */
+        */
 	protected String getSIPuri(String uri) {
 		String f = uri.substring(uri.indexOf("<")+1, uri.indexOf(">"));
 		int indexCollon = f.indexOf(":", f.indexOf("@"));
@@ -208,7 +214,7 @@ public class Myapp extends SipServlet {
         * Auxiliary function for extracting SPI URIs
         * @param  uri A URI with optional extra attributes 
         * @return SIP URI and port 
-    */
+        */
 	protected String getSIPuriPort(String uri) {
 		String f = uri.substring(uri.indexOf("<")+1, uri.indexOf(">"));
 		return f;
@@ -218,7 +224,7 @@ public class Myapp extends SipServlet {
         * Auxiliary function for extracting expires valiable
         * @param  uri A URI with optional extra attributes 
         * @return expires value 
-    */
+    	*/
 	protected String getPortExpires(String uri) {
 		String string = uri.substring(uri.indexOf(";")+1, uri.length()); // Obtemos o header d
 		String expirePlusValue = string.substring(string.indexOf(";")+1, string.length()); // Obtemos por exemplo "expires:3600"
@@ -227,35 +233,20 @@ public class Myapp extends SipServlet {
 		return value;
 	}
 
-    public boolean isSessionEstablished(String user1, String user2) {
-        String key1 = user1;
-        String key2 = user2;
-        return sessions.containsKey(key1) || sessions.containsKey(key2);
-    }
-
-    public void addSession(String user1, String user2) {
-    	String key1 = user1;
-        String key2 = user2;
-    	sessions.put(key1, "active");
-		sessions.put(key2, "active");
-		setStatus(user1, "BUSY");
-        setStatus(user2, "BUSY");
-    }
-
-    public void removeSession(String user1, String user2) {
-    	String key1 = user1;
-    	String key2 = user2;
-    	sessions.remove(key1);
-    	sessions.remove(key2);
-		setStatus(user1, "AVAILABLE");
-        setStatus(user2, "AVAILABLE");
-    }
-
-    public void setStatus(String user, String status) {
+	/**
+        * Auxiliary function for changing the user Status
+        * @param  userStatusMap HashMap that registers the user Status, initialized in the top of the class
+        */
+    private void setStatus(String user, String status) {
         userStatusMap.put(user, status);
     }
 
-	public String getStatus(String user) {
+	/**
+        * Auxiliary function for changing the user Status
+        * @param  userStatusMap HashMap that registers the user Status, initialized in the top of the class
+        * @return Status from a key
+        */
+	private String getStatus(String user) {
     	return userStatusMap.get(user);
     }
 
