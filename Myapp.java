@@ -26,9 +26,7 @@ public class Myapp extends SipServlet {
 	static private Map<String, String> RegistrarDB;
 
 	static private Map<String, String> sessions;
-	//public Map<String, String> sessions = new HashMap<>();
 	static private Map<String, String> userStatusMap;
-	//public Map<String, String> userStatusMap = new HashMap<>();
 
 	static private SipFactory factory;
 	
@@ -54,7 +52,9 @@ public class Myapp extends SipServlet {
 		String to = request.getHeader("To"); // Obtemos o "To" do request
     	String aor = getSIPuri(request.getHeader("To")); // Obtemos o "aor" do request
 
-		if (request.getExpires() != 0) { // Caso o valores "expires" do request seja diferente de 0 (REGISTER)
+		int expires = Integer.parseInt(getPortExpires(request.getHeader("Contact"))); // Tranformamos o valor de expires que está em string para int
+
+		if (expires != 0) { // Caso o valores "expires" do request seja diferente de 0 (REGISTER)
  			doRegistration(request, to, aor); // Efetua o registo
 
 		} else { // Caso o valores "expires" do request seja igual a 0 (DEREGISTER)
@@ -115,13 +115,13 @@ public class Myapp extends SipServlet {
 		}
 
 		// Some logs to show the content of the Registrar database.
-		log("REGISTER (myapp):***");
+		log("----------------------------------------------DEREGISTER (myapp):***------------------------------------------------------");
 		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
     		while (it.hasNext()) {
         		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
         		System.out.println(pairs.getKey() + " = " + pairs.getValue());
     		}
-		log("REGISTER (myapp):***");
+		log("----------------------------------------------DEREGISTER (myapp):***------------------------------------------------------");
 	}
 
 	/**
@@ -212,6 +212,19 @@ public class Myapp extends SipServlet {
 	protected String getSIPuriPort(String uri) {
 		String f = uri.substring(uri.indexOf("<")+1, uri.indexOf(">"));
 		return f;
+	}
+
+	/**
+        * Auxiliary function for extracting expires valiable
+        * @param  uri A URI with optional extra attributes 
+        * @return expires value 
+    */
+	protected String getPortExpires(String uri) {
+		String string = uri.substring(uri.indexOf(";")+1, uri.length()); // Obtemos o header d
+		String expirePlusValue = string.substring(string.indexOf(";")+1, string.length()); // Obtemos por exemplo "expires:3600"
+		String value = expirePlusValue.substring(expirePlusValue.indexOf("=")+1, expirePlusValue.length()); // Obtemos por exemplo "3600" em string
+
+		return value;
 	}
 
     public boolean isSessionEstablished(String user1, String user2) {
