@@ -4,7 +4,7 @@ The objective of this work is the design, creation and implementation of a suppl
 telecommunications. This service had components in the context of an out-of-context call
 of a call.
 
-## What the it's purpose
+## What it's purpose
 
 As part of the Telecommunications and Computer Engineering course, this GoFind 2.0 project was initiated as an evaluation requirement for a Intelligence and Management of Networks and Computers class.
 
