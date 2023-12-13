@@ -143,35 +143,28 @@ public class Myapp extends SipServlet {
 		log("----------------------------------------------INVITE (myapp):----------------------------------------------");
 		
 		if (domain.equals("a.pt")) { // The To domain is the same as the server 
-			if (toAor.contains("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
-				Proxy proxy = request.getProxy();
-                proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
-                proxy.setSupervised(false);
-                URI toContact = factory.createURI("sip:conf@127.0.0.1:5070");
-                proxy.proxyTo(toContact);
-					
-				setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
-
+			if (!RegistrarDB.containsKey(fromAor)) { // From AoR not in the database, reply 403
+				SipServletResponse response = request.createResponse(403);
+				response.send();
+	    	} else if (toAor.contains("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
+					Proxy proxy = request.getProxy();
+                	proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
+                	proxy.setSupervised(false);
+                	URI toContact = factory.createURI("sip:conf@127.0.0.1:5070");
+                	proxy.proxyTo(toContact);
 			} else if (!RegistrarDB.containsKey(toAor)) { // To AoR not in the database, reply 404
 				SipServletResponse response = request.createResponse(404);
 				response.send();
-
 	    	} else {
-
 				if (!getStatus(toAor).equals("AVAILABLE")) { // Verificar se o toAor está disponível
                 	SipServletResponse response = request.createResponse(486);
                 	response.send();
-
             	} else {
-
                 	Proxy proxy = request.getProxy();
                 	proxy.setRecordRoute(true);
                 	proxy.setSupervised(false);
                 	URI toContact = factory.createURI(RegistrarDB.get(toAor));
                 	proxy.proxyTo(toContact);
-					
-					setStatus(fromAor, "BUSY");
-					setStatus(toAor, "BUSY");
            		}
 			}		
 
@@ -183,7 +176,24 @@ public class Myapp extends SipServlet {
 	}
 
 	/**
-        * This is the function that actually manages the BYE operation
+        * This is the function that manages the ACK operation
+        * @param fromAor From the SIP message received, 
+		* @param toAor From the SIP message received
+    	*/
+	protected void doAck(SipServletRequest request) throws ServletException, IOException {
+    	String fromAor = getSIPuri(request.getHeader("From"));
+    	String toAor = getSIPuri(request.getHeader("To"));
+
+		if (toAor.contains("chat")) { // Se o toAor for chat o estado do user passa a em conferencia
+			setStatus(fromAor, "IN CONFERENCE");
+		} else {  // Para os outros casos, o estado dos dois users passa a disponivel
+    		setStatus(fromAor, "BUSY");
+			setStatus(toAor, "BUSY");
+		}
+	}
+
+	/**
+        * This is the function that manages the BYE operation
         * @param fromAor From the SIP message received, 
 		* @param toAor From the SIP message received
     	*/
