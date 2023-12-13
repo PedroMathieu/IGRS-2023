@@ -1,3 +1,4 @@
+
 /*
  * $Id: EchoServlet.java,v 1.5 2003/06/22 12:32:15 fukuda Exp $
  */
@@ -5,7 +6,6 @@ package org.mobicents.servlet.sip.example;
 
 import java.util.*;
 import java.io.IOException;
-import java.rmi.server.ServerCloneException;
 
 import javax.servlet.sip.SipServlet;	
 import javax.servlet.sip.SipServletRequest;
@@ -25,8 +25,8 @@ public class Myapp extends SipServlet {
 	private static final long serialVersionUID = 1L;
 	static private Map<String, String> RegistrarDB;
 	static private SipFactory factory;
-	private static final String CONFERENCE_URI = "sip:conference";
-    private static final String CONFERENCE_ROOM = "conference_";
+
+	private Map<String, String> userStatusMap = new HashMap<>();
 	
 	public Myapp() {
 		super();
@@ -38,119 +38,86 @@ public class Myapp extends SipServlet {
 	}
 
 	/**
-	 	* Acs as a desregistar service para as DEREGISTER messages
-	 	* @param request
-	 	*/
-	protected void doDeregister(SipServletRequest request) throws ServletException, 
+        * Acts as a registrar and deregistar and location service for REGISTER messages
+		* It chooses which operation (REGISTER or DEREGISTER) is in the SIP message received
+        * @param  request The SIP message received by the AS 
+    	*/
+	protected void doRegister(SipServletRequest request) throws ServletException,
 			IOException {
 		
-		String to = request.getHeader("To"); // Obtemos o header do "To"
-		String aor = getSIPuri(request.getHeader("To")); // Obtemos o Aor (Adress-Of-Record)
+		String to = request.getHeader("To"); // Obtemos o "To" do request
+    	String aor = getSIPuri(request.getHeader("To")); // Obtemos o "aor" do request
 
-		SipServletResponse response; // Criamos uma resposta
+		int expires = Integer.parseInt(getPortExpires(request.getHeader("Contact"))); // Tranformamos o valor de expires que está em string para int
 
-		if (!RegistrarDB.containsKey(aor)) { // Caso a bd não possua aquele user (user não está registado)
-			response = request.createResponse(404); // Resposta 404 (Not found response)
-			response.send(); // Envia mensagem
-		
-		} else { // Caso a bd possua aquele user (user está registado)
-			RegistrarDB.remove(aor); // User é removido
-			response = request.createResponse(200); // Resposta 200 (Success response)
-			response.send(); // Envia mensagem
+		if (expires != 0) { // Caso o valores "expires" do request seja diferente de 0 (REGISTER)
+ 			doRegistration(request, to, aor); // Efetua o registo
 
-			// Some logs to show the content of the Registrar database.
-			log("DEREGISTER (myapp):***");
-			Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
-
-				System.out.println("Conteúdo da db:"); // Usar para ser mais facile entender onde começa o conteúdo da db
-
-				while (it.hasNext()) {
-					Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
-					System.out.println(pairs.getKey() + " = " + pairs.getValue());
-				}
-			log("DEREGISTER (myapp):***");
+		} else { // Caso o valores "expires" do request seja igual a 0 (DEREGISTER)
+			doDeregistration(request, aor); // Efetua o deregisto
 		}
 	}
 
 	/**
-        * Acts as a registrar and location service for REGISTER messages
-        * @param  request The SIP message received by the AS 
-        */
-	protected void doRegister(SipServletRequest request) throws ServletException,
-			IOException {
+        * This is the function that actually manages the REGISTER operation
+        * @param request The SIP message received by the AS, 
+		* @param to From the SIP message received, 
+		* @param aor From the SIP message received
+    	*/
+	private void doRegistration(SipServletRequest request, String to, String aor) throws ServletException, IOException {
+    	SipServletResponse response; // Cria a resposta
 
-		String to = request.getHeader("To");
-		log("To: " + to); //
+		String domain = aor.substring(aor.indexOf("@") + 1, aor.length()); // Obtemos o "domain" do "aor"
+        String contact = getSIPuriPort(request.getHeader("Contact")); // Obtemos o "contact" do request
 
-		String aux = getSIPuri(to); // Optional
-		log("Aux: " + aux); //
-
-		String aux1 = getSIPuriPort(to); // Optional
-		log("Aux1: " + aux1); //
-
-		String contact1 = request.getHeader("Contact"); // Optional
-		log("Contact1: " + contact1); //
-
-		String aux2 = getSIPuri(contact1); // Optional
-		log("Aux2: " + aux2); //
-
-		String aux3 = getSIPuriPort(contact1); // Optional
-		log("Aux3: " + aux3); //
-
-		// String aor = getSIPuri(request.getHeader("To"));
-		// log("Aor: " + aor); 
-
-		String contact = getSIPuriPort(request.getHeader("Contact"));
-	    log("Contact: " + contact); //
-
-		SipServletResponse response; // Criamos uma resposta
-
-		if (isValidDomain(to)) { // Verifica se o domain do "To" é válido (Se só tem um '@')
-			String aor = getSIPuri(request.getHeader("To")); // Obtemos o Aor (Adress-Of-Record)
-			String domain = aor.substring(aor.indexOf("@") + 1); // Obtemos o domain (O que está a seguir ao  único '@')
-
-			if ("acme.pt".equals(domain)) { // Se o domain corresponder a "acme.pt"
-				RegistrarDB.put(aor, contact); // Adiciona à bd
-				response = request.createResponse(200); // Resposta 200 (Sucess response)
-				response.send(); // Envia a mensagem
-
-			} else { // Se o domain não corresponder a "acme.pt"
-				response = request.createResponse(403); // Resposta 403 (Forbbiden response)
-				response.send(); // Envia mensagem
+			if ("a.pt".equals(domain)) { // O dominio corresponde ao pretendido
+				RegistrarDB.put(aor, contact); // Adcionamos à BD
+				setStatus(aor, "AVAILABLE"); // Colocamos o está do "aor" com 'AVAILABLE'
+				response = request.createResponse(200); // 200 (ok response)
+            	response.send(); // Envia a mensagem
+				
+			} else { // O dominio não corresponde ao pretendido 
+				response = request.createResponse(403); // 403 (forbidden response)
+            	response.send(); // Envia a mensagem
 			}
-	
-		} else { // Se o domain não for válido
-			response = request.createResponse(400); // Resposta 400 (Bad response)
-			response.send(); // Envia mensagem
-		}
 
-		//RegistrarDB.put(aor, contact); // Adiciona à bd
-		//SipServletResponse response; 
-		//response = request.createResponse(200);
-		//response.send();
-		
-	    // Some logs to show the content of the Registrar database.
-		log("REGISTER (myapp):***");
-		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
-
-			System.out.println("Conteúdo da db:"); // Usar para ser mais facile entender onde começa o conteúdo da db
-
-    		while (it.hasNext()) {
-        		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
-        		System.out.println(pairs.getKey() + " = " + pairs.getValue());
-    		}
-		log("REGISTER (myapp):***");
+		// Some logs to show the content of the Registrar database.
+		log("----------------------------------------------REGISTER (myapp):----------------------------------------------");
+			Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    			while (it.hasNext()) {
+        			Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        			System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    			}
+		log("----------------------------------------------REGISTER (myapp):----------------------------------------------");
 	}
 
-	private boolean isValidDomain(String uri) {
-		if (uri != null && uri.contains("@")) {
-			int indexof = uri.indexOf("@"); // Dá a posição do primeiro '@'
-			int lastIndexOf = uri.lastIndexOf("@"); // Dá a posição do último '@'
+	/**
+        * This is the function that actually manages the DEREGISTER operation
+        * @param request The SIP message received by the AS, 
+		* @param aor From the SIP message received
+    	*/
+	private void doDeregistration(SipServletRequest request, String aor) throws ServletException, IOException {
+    	SipServletResponse response; // Cria a resposta
 
-			return indexof == lastIndexOf; // Caso a primeira e última posição sejam a mesma significa que só há um @ no dominio
+		if (RegistrarDB.containsKey(aor)) { // Se o "aor" existir na bd 
+			RegistrarDB.remove(aor); // Remove da bd 
+			userStatusMap.remove(aor); // Remove o estado do aor removido
+			response = request.createResponse(200); // 200 (ok response)
+        	response.send(); // Envia a mensagem
+		
+		} else { // Se o "aor" não existir na bd
+			response = request.createResponse(403); // 403 (forbidden response)
+        	response.send(); // Envia a mensagem
 		}
 
-		return false; // Dá false se o uri for null ou se não tiver nenhum '@'
+		// Some logs to show the content of the Registrar database.
+		log("----------------------------------------------DEREGISTER (myapp):----------------------------------------------");
+			Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    			while (it.hasNext()) {
+        			Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        			System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    			}
+		log("----------------------------------------------DEREGISTER (myapp):----------------------------------------------");
 	}
 
 	/**
@@ -160,35 +127,22 @@ public class Myapp extends SipServlet {
         * @param  request The SIP message received by the AS 
         */
 	protected void doInvite(SipServletRequest request)
-                  throws ServletException, IOException {
+            throws ServletException, IOException {
+		
+		String fromAor = getSIPuri(request.getHeader("From")); // Get the From AoR
+		String toAor = getSIPuri(request.getHeader("To")); // Get the To AoR
+		String domain = toAor.substring(toAor.indexOf("@")+1, toAor.length());
 		
 		// Some logs to show the content of the Registrar database.
-		log("INVITE (myapp):***");
-		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
-    		while (it.hasNext()) {
-        		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
-        		System.out.println(pairs.getKey() + " = " + pairs.getValue());
-    		}
-		log("INVITE (myapp):***");
+		log("----------------------------------------------INVITE (myapp):----------------------------------------------");
+			Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    			while (it.hasNext()) {
+        			Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        			System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    			}
+		log("----------------------------------------------INVITE (myapp):----------------------------------------------");
 		
-<<<<<<< Updated upstream
-		/*
-		String aor = getSIPuri(request.getHeader("To")); // Get the To AoR
-	    if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
-			SipServletResponse response; 
-			response = request.createResponse(404);
-			response.send();
-	    } else {
-			SipServletResponse response = request.createResponse(300);
-			// Get the To AoR contact from the database and add it to the response 
-			response.setHeader("Contact",RegistrarDB.get(aor));
-			response.send();
-		}
-		SipServletResponse response = request.createResponse(404);
-		response.send();
-		*/
-=======
-		if (domain.equals("a.pt")) { // The To domain is the same as the server & check if the user is part of the designated group to join the conference
+		if (domain.equals("a.pt")) { // The To domain is the same as the server 
 			if (toAor.contains("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
 				Proxy proxy = request.getProxy();
                 proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
@@ -197,127 +151,41 @@ public class Myapp extends SipServlet {
                 proxy.proxyTo(toContact);
 					
 				setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
->>>>>>> Stashed changes
 
-        if ("acme.pt".equals(domain)) {
-            if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
-				SipServletResponse response; 
-				response = request.createResponse(404);
+			} else if (!RegistrarDB.containsKey(toAor)) { // To AoR not in the database, reply 404
+				SipServletResponse response = request.createResponse(404);
 				response.send();
+
 	    	} else {
-				Proxy proxy = request.getProxy();
-				proxy.setRecordRoute(false);
-				proxy.setSupervised(false);
-				URI toContact = factory.createURI(RegistrarDB.get(aor));
-				proxy.proxyTo(toContact);
 
-				if (isConferenceCall(request.getRequestURI().toString())) {
-                // Add participant to a conference call
-                String conferenceRoom = determineConferenceRoom(request.getRequestURI().toString());
-                addParticipantToConference(request, toContact, conferenceRoom);
-				}
-			}			
-				
+				if (!getStatus(toAor).equals("AVAILABLE")) { // Verificar se o toAor está disponível
+                	SipServletResponse response = request.createResponse(486);
+                	response.send();
 
-        } else if (request.getRequestURI().toString().startsWith(CONFERENCE_URI_PREFIX)) {
-            // Handle INVITE for a conference call
-            handleConferenceCall(request);
-        } else {
-            // Destination user is not within the predefined domain, handle accordingly
-            // You might choose to respond with an error or proxy to an external SIP server
-            Proxy proxy = request.getProxy();
-            proxy.proxyTo(request.getRequestURI());
-        }
-    }
+            	} else {
 
-<<<<<<< Updated upstream
-		/*
-	    if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
-			SipServletResponse response; 
-			response = request.createResponse(404);
-			response.send();
-	    } else {
-			SipServletResponse response = request.createResponse(300);
-			// Get the To AoR contact from the database and add it to the response 
-			response.setHeader("Contact",RegistrarDB.get(aor));
-			response.send();
-		}
-		*/
-=======
                 	Proxy proxy = request.getProxy();
-                	proxy.setRecordRoute(true); //Indica a Recorded Route header, para que todas as request sigam o mesmo caminho
-                	proxy.setSupervised(false); //A proxy não vai ativamente interagir com a chamada
-                	URI toContact2 = factory.createURI(RegistrarDB.get(toAor)); // Cria um objeto URI, este representa o endereço de contacto indentificado pelo "toAor", que foi buscado a base de Dados
-                	proxy.proxyTo(toContact2);
+                	proxy.setRecordRoute(true);
+                	proxy.setSupervised(false);
+                	URI toContact = factory.createURI(RegistrarDB.get(toAor));
+                	proxy.proxyTo(toContact);
 					
 					setStatus(fromAor, "BUSY");
 					setStatus(toAor, "BUSY");
            		}
 			}		
->>>>>>> Stashed changes
 
-	private void addParticipantToConference(SipServletRequest request, String participantContact, String conferenceRoom) {
-        try {
-            SipSessionsUtil sessionsUtil = (SipSessionsUtil) getServletContext().getAttribute(SIP_SESSIONS_UTIL);
-            SipApplicationSession sipApplicationSession = request.getApplicationSession();
-            SipSession sipSession = sessionsUtil.createSipSession(sipApplicationSession);
-            sipSession.setAttribute(CONFERENCE_ROOM_PREFIX + conferenceRoom, conferenceRoom);
-
-            // Forward INVITE to the conference URI
-            SipServletRequest conferenceInvite = request.getProxy().createRequest(
-                    CONFERENCE_URI_PREFIX + "@" + request.getHeader("Host"), "INVITE");
-            conferenceInvite.addHeader("Contact", participantContact);
-            conferenceInvite.addHeader("Route", "<sip:" + participantContact + ">");
-            conferenceInvite.setContent(request.getContent(), request.getContentType());
-            conferenceInvite.send();
-        } catch (ServletException | IOException e) {
-            e.printStackTrace();
-        }
-    }
-    
-
-    private void handleConferenceCall(SipServletRequest request) {
-        try {
-            SipSessionsUtil sessionsUtil = (SipSessionsUtil) getServletContext().getAttribute(SIP_SESSIONS_UTIL);
-            SipSession sipSession = sessionsUtil.getCorrespondingSipSession(request);
-
-            // Forward INVITE to all participants in the conference
-            Set<SipSession> conferenceParticipants = sessionsUtil.getActiveSessions(sipSession.getApplicationSession());
-            for (SipSession participant : conferenceParticipants) {
-                if (!participant.equals(sipSession)) {
-                    String conferenceRoom = determineConferenceRoom(request.getRequestURI().toString());
-                    SipServletRequest participantInvite = participant.createRequest("INVITE");
-                    participantInvite.addHeader("Route", "<sip:" + CONFERENCE_URI_PREFIX + "@" + request.getHeader("Host") + ">");
-                    participantInvite.addHeader("Contact", CONFERENCE_ROOM_PREFIX + conferenceRoom);
-                    participantInvite.send();
-                }
-            }
-
-            // Respond to the original INVITE request
-            SipServletResponse response = request.createResponse(200);
-            response.send();
-        } catch (ServletException | IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-		private String determineConferenceRoom(String uri) {
-			// Extract the conference room identifier from the URI
-			// You might want to implement a more sophisticated logic based on your requirements
-			return uri.substring(CONFERENCE_URI_PREFIX.length() + 1);
+		} else {
+			SipServletResponse response = request.createResponse(403);
+        	response.send();
 		}
 
-<<<<<<< Updated upstream
-		private boolean isConferenceCall(String uri) {
-			// Check if the URI corresponds to a conference call
-			return uri.startsWith(CONFERENCE_URI_PREFIX);
-=======
 	}
 
 	/**
         * This is the function that actually manages the BYE operation
         * @param fromAor From the SIP message received, 
-		* @param toAor To the SIP message received
+		* @param toAor From the SIP message received
     	*/
 	protected void doBye(SipServletRequest request) throws ServletException, IOException {
     	String fromAor = getSIPuri(request.getHeader("From"));
@@ -330,10 +198,8 @@ public class Myapp extends SipServlet {
 		
     		setStatus(fromAor, "AVAILABLE");
 			setStatus(toAor, "AVAILABLE");
->>>>>>> Stashed changes
 		}
-
-
+	}
 	
 	/**
         * Auxiliary function for extracting SPI URIs
@@ -359,5 +225,30 @@ public class Myapp extends SipServlet {
 		return f;
 	}
 
+	/**
+        * Auxiliary function for extracting expires valiable
+        * @param  uri A URI with optional extra attributes 
+        * @return expires value 
+    	*/
+	protected String getPortExpires(String uri) {
+		String value = uri.substring(uri.indexOf("=")+1, uri.length()); // Apartir do uir "<sip:alice@a.pt:5555>;expires=3600" obtemos "3600" em string
+		return value;
+	}
 
+	/**
+        * Auxiliary function for changing the user Status
+        * @param  userStatusMap HashMap that registers the user Status, initialized in the top of the class
+        */
+    private void setStatus(String user, String status) {
+        userStatusMap.put(user, status);
+    }
+
+	/**
+        * Auxiliary function for changing the user Status
+        * @param  userStatusMap HashMap that registers the user Status, initialized in the top of the class
+        * @return Status from a key
+        */
+	private String getStatus(String user) {
+    	return userStatusMap.get(user);
+    }
 }
