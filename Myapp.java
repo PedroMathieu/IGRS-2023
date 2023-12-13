@@ -171,6 +171,7 @@ public class Myapp extends SipServlet {
     		}
 		log("INVITE (myapp):***");
 		
+<<<<<<< Updated upstream
 		/*
 		String aor = getSIPuri(request.getHeader("To")); // Get the To AoR
 	    if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
@@ -186,6 +187,17 @@ public class Myapp extends SipServlet {
 		SipServletResponse response = request.createResponse(404);
 		response.send();
 		*/
+=======
+		if (domain.equals("a.pt")) { // The To domain is the same as the server & check if the user is part of the designated group to join the conference
+			if (toAor.contains("chat")) { // Se o toAor for chat o utilizador conecta-se ao servidor de conferências
+				Proxy proxy = request.getProxy();
+                proxy.setRecordRoute(true); // route tem de estar true senão o request BYE não passa pelo servidor
+                proxy.setSupervised(false);
+                URI toContact = factory.createURI("sip:conf@127.0.0.1:5070");
+                proxy.proxyTo(toContact);
+					
+				setStatus(fromAor, "CONFERENCE"); // Muda o estado do fromAor para conferencia
+>>>>>>> Stashed changes
 
         if ("acme.pt".equals(domain)) {
             if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
@@ -218,6 +230,7 @@ public class Myapp extends SipServlet {
         }
     }
 
+<<<<<<< Updated upstream
 		/*
 	    if (!RegistrarDB.containsKey(aor)) { // To AoR not in the database, reply 404
 			SipServletResponse response; 
@@ -230,6 +243,18 @@ public class Myapp extends SipServlet {
 			response.send();
 		}
 		*/
+=======
+                	Proxy proxy = request.getProxy();
+                	proxy.setRecordRoute(true); //Indica a Recorded Route header, para que todas as request sigam o mesmo caminho
+                	proxy.setSupervised(false); //A proxy não vai ativamente interagir com a chamada
+                	URI toContact2 = factory.createURI(RegistrarDB.get(toAor)); // Cria um objeto URI, este representa o endereço de contacto indentificado pelo "toAor", que foi buscado a base de Dados
+                	proxy.proxyTo(toContact2);
+					
+					setStatus(fromAor, "BUSY");
+					setStatus(toAor, "BUSY");
+           		}
+			}		
+>>>>>>> Stashed changes
 
 	private void addParticipantToConference(SipServletRequest request, String participantContact, String conferenceRoom) {
         try {
@@ -282,9 +307,30 @@ public class Myapp extends SipServlet {
 			return uri.substring(CONFERENCE_URI_PREFIX.length() + 1);
 		}
 
+<<<<<<< Updated upstream
 		private boolean isConferenceCall(String uri) {
 			// Check if the URI corresponds to a conference call
 			return uri.startsWith(CONFERENCE_URI_PREFIX);
+=======
+	}
+
+	/**
+        * This is the function that actually manages the BYE operation
+        * @param fromAor From the SIP message received, 
+		* @param toAor To the SIP message received
+    	*/
+	protected void doBye(SipServletRequest request) throws ServletException, IOException {
+    	String fromAor = getSIPuri(request.getHeader("From"));
+    	String toAor = getSIPuri(request.getHeader("To"));
+
+		if (toAor.contains("chat")) { // Se o toAor for chat o estado do user passa a disponivel
+			setStatus(fromAor, "AVAILABLE");
+
+		} else {  // Para os outros casos, o estado dos dois users passa a disponivel
+		
+    		setStatus(fromAor, "AVAILABLE");
+			setStatus(toAor, "AVAILABLE");
+>>>>>>> Stashed changes
 		}
 
 
