@@ -185,7 +185,7 @@ public class Myapp extends SipServlet {
 	/**
         * This is the function that actually manages the BYE operation
         * @param fromAor From the SIP message received, 
-		* @param toAor From the SIP message received
+		* @param toAor To the SIP message received
     	*/
 	protected void doBye(SipServletRequest request) throws ServletException, IOException {
     	String fromAor = getSIPuri(request.getHeader("From"));
