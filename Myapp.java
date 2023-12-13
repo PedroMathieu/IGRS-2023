@@ -24,11 +24,17 @@ public class Myapp extends SipServlet {
 	 */
 	private static final long serialVersionUID = 1L;
 	static private Map<String, String> RegistrarDB;
+
+	static private Map<String, String> sessions;
+	static private Map<String, String> userStatusMap;
+
 	static private SipFactory factory;
 	
 	public Myapp() {
 		super();
 		RegistrarDB = new HashMap<String,String>();
+		userStatusMap = new HashMap<String,String>();
+		sessions = new HashMap<String,String>();
 	}
 	
 	public void init() {
@@ -36,87 +42,102 @@ public class Myapp extends SipServlet {
 	}
 
 	/**
-        * Acts as a registrar and location service for REGISTER messages
+        * Acts as a registrar and deregistar and location service for REGISTER messages
+		* It chooses which operation (REGISTER or DEREGISTER) is in the SIP message received
         * @param  request The SIP message received by the AS 
-        */
+    */
 	protected void doRegister(SipServletRequest request) throws ServletException,
-	IOException {
-	
-	String to = request.getHeader("To");
-	String aor = getSIPuri(request.getHeader("To"));
+			IOException {
+		
+		String to = request.getHeader("To"); // Obtemos o "To" do request
+    	String aor = getSIPuri(request.getHeader("To")); // Obtemos o "aor" do request
 
-	if (request.getExpires() != 0) {
-		doRegistration(request, to, aor);
+		int expires = Integer.parseInt(getPortExpires(request.getHeader("Contact"))); // Tranformamos o valor de expires que está em string para int
 
-	} else {
-		doDeregistration(request, aor);
+		if (expires != 0) { // Caso o valores "expires" do request seja diferente de 0 (REGISTER)
+ 			doRegistration(request, to, aor); // Efetua o registo
+
+		} else { // Caso o valores "expires" do request seja igual a 0 (DEREGISTER)
+			doDeregistration(request, aor); // Efetua o deregisto
+		}
 	}
-}
 
-private void doRegistration(SipServletRequest request, String to, String aor) throws ServletException, IOException {
-	SipServletResponse response;
+	/**
+        * This is the function that actually manages the REGISTER operation
+        * @param request The SIP message received by the AS, 
+		* @param to From the SIP message received, 
+		* @param aor From the SIP message received
+    */
+	private void doRegistration(SipServletRequest request, String to, String aor) throws ServletException, IOException {
+    	SipServletResponse response; // Cria a resposta
 
-	//if (isValidDomain(to)) {
-		String domain = aor.substring(aor.indexOf("@") + 1, aor.length());
-		String contact = getSIPuriPort(request.getHeader("Contact"));
+		String domain = aor.substring(aor.indexOf("@") + 1, aor.length()); // Obtemos o "domain" do "aor"
+        String contact = getSIPuriPort(request.getHeader("Contact")); // Obtemos o "contact" do request
 
-		if ("a.pt".equals(domain)) {
-			RegistrarDB.put(aor, contact);
-			setStatus(aor, "AVAILABLE");
-			response = request.createResponse(200);
-			response.send();
-			
-		} else {
-			response = request.createResponse(403);
-			response.send();
+			if ("a.pt".equals(domain)) { // O dominio corresponde ao pretendido
+				RegistrarDB.put(aor, contact); // Adcionamos à BD
+				setStatus(aor, "AVAILABLE"); // Colocamos o está do "aor" com 'AVAILABLE'
+				response = request.createResponse(200); // 200 (ok response)
+            	response.send(); // Envia a mensagem
+				
+			} else { // O dominio não corresponde ao pretendido 
+				response = request.createResponse(403); // 403 (forbidden response)
+            	response.send(); // Envia a mensagem
+			}
+
+		// Some logs to show the content of the Registrar database.
+		log("REGISTER (myapp):***");
+		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    		while (it.hasNext()) {
+        		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        		System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    		}
+		log("REGISTER (myapp):***");
+	}
+
+	/**
+        * This is the function that actually manages the DEREGISTER operation
+        * @param request The SIP message received by the AS, 
+		* @param aor From the SIP message received
+    */
+	private void doDeregistration(SipServletRequest request, String aor) throws ServletException, IOException {
+    	SipServletResponse response; // Cria a resposta
+
+		if (RegistrarDB.containsKey(aor)) { // Se o "aor" existir na bd 
+			RegistrarDB.remove(aor); // Remove da bd 
+			userStatusMap.remove(aor); // Remove o estado do aor removido
+			response = request.createResponse(200); // 200 (ok response)
+        	response.send(); // Envia a mensagem
+		
+		} else { // Se o "aor" não existir na bd
+			response = request.createResponse(403); // 403 (forbidden response)
+        	response.send(); // Envia a mensagem
 		}
 
-	//} else {
-	//	response = request.createResponse(400);
-	//	response.send();
-	//}
+		// Some logs to show the content of the Registrar database.
+		log("----------------------------------------------DEREGISTER (myapp):***------------------------------------------------------");
+		Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
+    		while (it.hasNext()) {
+        		Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
+        		System.out.println(pairs.getKey() + " = " + pairs.getValue());
+    		}
+		log("----------------------------------------------DEREGISTER (myapp):***------------------------------------------------------");
+	}
 
-	// Some logs to show the content of the Registrar database.
-	log("REGISTER (myapp):***");
-	Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
-		while (it.hasNext()) {
-			Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
-			System.out.println(pairs.getKey() + " = " + pairs.getValue());
-		}
-	log("REGISTER (myapp):***");
-}
-
-private void doDeregistration(SipServletRequest request, String aor) throws ServletException, IOException {
-	SipServletResponse response;
-
-	//if (RegistrarDB.containsKey(aor)) {
-		RegistrarDB.remove(aor);
-		response = request.createResponse(200);
-		response.send();
-	
-	//} else {
-	//	response = request.createResponse(404);
-	//	response.send();
-	//}
-
-	// Some logs to show the content of the Registrar database.
-	log("REGISTER (myapp):***");
-	Iterator<Map.Entry<String,String>> it = RegistrarDB.entrySet().iterator();
-		while (it.hasNext()) {
-			Map.Entry<String,String> pairs = (Map.Entry<String,String>)it.next();
-			System.out.println(pairs.getKey() + " = " + pairs.getValue());
-		}
-	log("REGISTER (myapp):***");
-}
+	/**
+		RUI ANDRÉ JESUS
+		COMENTA O TEU
+		CÓDIGO... JÁAAAAAAAA 
+	*/
 
 	/**
         * Sends SIP replies to INVITE messages
         * - 300 if registred
         * - 404 if not registred
         * @param  request The SIP message received by the AS 
-        */
+    */
 	protected void doInvite(SipServletRequest request)
-                  throws ServletException, IOException {
+            throws ServletException, IOException {
 		
 		String fromAor = getSIPuri(request.getHeader("From")); // Get the From AoR
 		String toAor = getSIPuri(request.getHeader("To")); // Get the To AoR
@@ -143,70 +164,17 @@ private void doDeregistration(SipServletRequest request, String aor) throws Serv
             	} else {
 					log("ja bu sabi 3");
                 	Proxy proxy = request.getProxy();
-                	proxy.setRecordRoute(false);
+                	proxy.setRecordRoute(true);
                 	proxy.setSupervised(false);
                 	URI toContact = factory.createURI(RegistrarDB.get(toAor));
                 	proxy.proxyTo(toContact);
-					
 					addSession(toAor, fromAor);
            		}
-			}			
+			}	
+
 		} else {
 			SipServletResponse response = request.createResponse(403);
         	response.send();
-		}
-
-	}
-
-
-	protected void doMessage(SipServletRequest request) throws ServletException, IOException {
-		String fromAor = getSIPuri(request.getHeader("From"));
-		String toAor = getSIPuri(request.getHeader("To"));
-		String DomainAor = "gofind@acme.pt";  // Destino fixo AoR para mensagens Twinkle
-		String messageContent = new String(request.getRawContent());
-		String domain = fromAor.substring(fromAor.indexOf("@") + 1, fromAor.length());
-	
-		// Check if the sender belongs to the allowed group
-		if (!domain.equals("acme.pt")) {
-			// Responda com um erro SIP indicando a não disponibilidade do serviço para o remetente
-			SipServletResponse response = request.createResponse(403);
-			response.send();
-			return;
-		}
-	
-		if (isValidAor(messageContent)) {
-			// Responda com um erro SIP indicando um pedido mal formado
-			SipServletResponse response = request.createResponse(400);
-			response.send();
-			return;
-		}
-	
-		if (!isSessionEstablished(toAor, fromAor)){
-			if(!getStatus(toAor).equals("AVAILABLE") || !RegistrarDB.containsKey(toAor)) {
-		
-				SipServletResponse response = request.createResponse(200);
-				response.send();
-		
-				// Crie e envie uma mensagem SIP com o estado do utilizador alvo no conteúdo
-				SipServletRequest statusMessage = factory.createRequest(
-						getServletContext(),
-						"MESSAGE",
-						"sip:" + fromAor);
-				statusMessage.setHeader("Content-Type", "text/plain");
-				String statusContent = getStatus(toAor); // Obtém o estado do utilizador alvo
-				statusMessage.setContent(statusContent.getBytes(), "text/plain");
-				statusMessage.send();
-
-			}else{ //Caso o utilizador definido no AoR (alvo) esteja registado e disponível são enviados pelo serviço pedidos de inicio de sessão para o utilizador que enviou a mensagem e o utilizador alvo
-
-				Proxy proxy = request.getProxy();
-				proxy.setRecordRoute(false);
-				proxy.setSupervised(false);
-				URI toContact = factory.createURI(RegistrarDB.get(toAor));
-				proxy.proxyTo(toContact);
-				addSession(toAor, fromAor);
-
-			}
 		}
 	}
 
@@ -220,12 +188,73 @@ private void doDeregistration(SipServletRequest request, String aor) throws Serv
     
     	super.doBye(request);
 	}
+
+	protected void doMessage(SipServletRequest request) throws ServletException, IOException {
+		String fromAor = getSIPuri(request.getHeader("From"));
+		String toAor = getSIPuri(request.getHeader("To"));
+		String messageContent = new String(request.getRawContent());
+		String domain = toAor.substring(toAor.indexOf("@") + 1, toAor.length());
+		String fromContact = RegistrarDB.get(fromAor);
+
+		//Verifica se a pessoa que envia a mensagem é "gofind@a.pt"
+		if (!toAor.equals("gofind") && !domain.equals("a.pt")) {
+			// Responda com um erro SIP indicando a não disponibilidade do serviço para o remetente
+			SipServletResponse response = request.createResponse(403);
+			response.send();
+			return;
+		}
+
+		if(fromAor.equals("a.pt")){
+			SipServletResponse response = request.createResponse(403);
+			response.send();
+			return;
+		}
+	
+		if (!isValidAor(messageContent)) {
+			// Responda com um erro SIP indicando um pedido mal formado
+			SipServletResponse response = request.createResponse(400);
+			response.send();
+			return;
+		}
+
+		if(!RegistrarDB.containsKey(messageContent)){
+
+			SipServletRequest myrequest = factory.createRequest(request.getApplicationSession(), "MESSAGE", "sip:gofind@a.pt", fromContact);
+			SipServletResponse response = request.createResponse(200);
+			String notr = "Utilizador nao registado";
+			myrequest.setContent((Object) notr, "text/plain");
+			response.send();
+			myrequest.send();
+
+		}else if(!getStatus(messageContent).equals("AVAILABLE")) {
+
+			SipServletRequest myrequest = factory.createRequest(request.getApplicationSession(), "MESSAGE", "sip:gofind@a.pt", fromContact);
+			SipServletResponse response = request.createResponse(200);
+			String status = getStatus(messageContent);
+			myrequest.setContent((Object) status, "text/plain");
+			response.send();
+			myrequest.send();
+
+		}else{
+
+			String toContact = RegistrarDB.get(messageContent);
+			SipServletRequest myrequest = factory.createRequest(request.getApplicationSession(), "INVITE", fromContact, toContact);
+			myrequest.send();
+
+		}
+			
+	}
+
+
+	private boolean isValidAor(String aor) {
+		return aor != null && aor.endsWith("@a.pt");
+	}
 	
 	/**
         * Auxiliary function for extracting SPI URIs
         * @param  uri A URI with optional extra attributes 
         * @return SIP URI 
-        */
+    */
 	protected String getSIPuri(String uri) {
 		String f = uri.substring(uri.indexOf("<")+1, uri.indexOf(">"));
 		int indexCollon = f.indexOf(":", f.indexOf("@"));
@@ -239,13 +268,23 @@ private void doDeregistration(SipServletRequest request, String aor) throws Serv
         * Auxiliary function for extracting SPI URIs
         * @param  uri A URI with optional extra attributes 
         * @return SIP URI and port 
-        */
+    */
 	protected String getSIPuriPort(String uri) {
 		String f = uri.substring(uri.indexOf("<")+1, uri.indexOf(">"));
 		return f;
 	}
 
-	public Map<String, String> sessions = new HashMap<>();
+	/**
+        * Auxiliary function for extracting expires valiable
+        * @param  uri A URI with optional extra attributes 
+        * @return expires value 
+    */
+	protected String getPortExpires(String uri) {
+		String string = uri.substring(uri.indexOf(";")+1, uri.length()); // Obtemos o header "<sip:alice@a.pt:5555>;expires=3600"
+		String expirePlusValue = string.substring(string.indexOf(";")+1, string.length()); // Obtemos por exemplo "expires:3600"
+		String value = expirePlusValue.substring(expirePlusValue.indexOf("=")+1, expirePlusValue.length()); // Obtemos por exemplo "3600" em string
+		return value;
+	}
 
     public boolean isSessionEstablished(String user1, String user2) {
         String key1 = user1;
@@ -271,8 +310,6 @@ private void doDeregistration(SipServletRequest request, String aor) throws Serv
         setStatus(user2, "AVAILABLE");
     }
 
-	public Map<String, String> userStatusMap = new HashMap<>();
-
     public void setStatus(String user, String status) {
         userStatusMap.put(user, status);
     }
@@ -280,9 +317,6 @@ private void doDeregistration(SipServletRequest request, String aor) throws Serv
 	public String getStatus(String user) {
     	return userStatusMap.get(user);
     }
-	
-	private boolean isValidAor(String aor) {
-		return aor != null && aor.endsWith("@acme.pt");
-	}
+
 
 }
