@@ -165,9 +165,9 @@ public class Myapp extends SipServlet {
             	} else {
 
                 	Proxy proxy = request.getProxy();
-                	proxy.setRecordRoute(true);
-                	proxy.setSupervised(false);
-                	URI toContact = factory.createURI(RegistrarDB.get(toAor));
+                	proxy.setRecordRoute(true); // Habilita a gravação do percurso que a mensagem SIP percorre, e indica o percurso que as request tem de seguir
+                	proxy.setSupervised(false); // Define o atributo Supervised como falso, indicando que não há supervisão de chamada ativa
+                	URI toContact = factory.createURI(RegistrarDB.get(toAor)); // Cria um URI para o endereço de contato do user chamado obtido a partir da Base de Dados
                 	proxy.proxyTo(toContact);
 					
 					setStatus(fromAor, "BUSY");
