@@ -1,1 +1,104 @@
+### Sprint Report #1
+## Sprint Overview:
+# Sprint Number: 1
 
+# Dates: [07/11/2023] to [27/11/2023]
+# Focus Areas: Design and GRL Implementation for the SIP Service
+
+# Accomplishments: 
+
+# Design Phase:
+Key Design Decisions and Components for GoFind 2.0:
+
+User Base:
+Define the target users as groups of friends seeking simple communication
+Users believe that these contacts will strengthen their relationships
+
+Privacy and Access Control:
+Ensure the service is accessible only to a closed set of friends
+Implement robust privacy measures to safeguard user data
+
+Communication Modes:
+Facilitate two forms of contact:
+Direct calls between pairs of users
+Participation in group conferences involving all users
+
+Direct Call Implementation:
+Enable direct calls through the standard call establishment process
+Include status indications (e.g., busy) and specify if the caller has access to the service
+
+Indirect Call Mechanism:
+Allow users to initiate calls indirectly by sending a written message indicating the desired pair to contact
+
+Responses should indicate:
+The possibility of using the service
+Status of the selected pair
+
+Group Conference Sessions:
+Users within the group join a conference by establishing a session to a fixed, pre-defined address.
+Define mechanisms for managing participation, including adding/removing users.
+
+User Registration Process:
+Users register by providing information about:
+Availability.
+Identity.
+###
+Created: - Users GRL Diagram
+         - Operator GRL DIagram
+
+# GRL Implementation Phase:
+Using GRL, we defined goals and tasks to create a diagram that responded to the project's objective
+
+Challenges:
+We encountered a challenge in interpreting both user and operator requirements while utilizing GRL
+We also found difficult in relating the requirements of both sides
+
+Next Steps:
+Create the definitions of ready and implement the functions in java accordingly
+
+Feedback and Reflection:
+In reflection, our team successfully executed nearly every task in accordance with the planned timeline. 
+This achievement underscores our commitment to project management and the effective coordination of our efforts.
+
+
+### Sprint Report #2
+## Sprint Overview:
+# Sprint Number: 2
+Dates: [28/11/2023] to [17/12/2023]
+Focus Areas: Testing and Coding for the SIP Service using Siplets
+
+Accomplishments: 
+
+Coding Phase:
+Made: -doRegistration() 
+      -doDeregistration()
+      -doAck()
+      -doBye()
+      -doMessage() 
+      -doResponse() Non-functional
+      -getPortExpires()
+      -setStatus()
+      -getStatus()
+      -isValidAor()
+
+Reconfigured: -doRegister()
+              -getSIPuri()
+              -doInvite()
+              -getSIPuriPort()
+
+Testing Phase:
+Our coding process was able to smoothly incorporate extensive testing, guaranteeing a comprehensive assessment of each component. 
+We carefully noted and swiftly resolved every problem that arose during testing during this phase.
+
+Challenges:
+During the development process, significant obstacles apeared mainly in the execution of vital features like registration, direct calls, conference calls, and indirect calls. 
+One major issue that came up was with the direct call functionality, more specifically, the 'doBye' function. 
+Here we had a problem where the route that was recorded was incorrectly set to 'false,' preventing the route from being indicated for the next ACK. 
+Important details regarding the route that was recorded were not able to reach the server because of this disparity.
+
+In order to get past this barrier, our group carefully examined the code to identify the core cause of the 'doBye' function. 
+We found and fixed the problem via a code review session, making sure that the recorded route data went to the server.
+
+Feedback and Reflection:
+After all was said and done, our team completed almost all of the tasks within the allocated time.
+This achievement demonstrates our dedication to project management and our ability to efficiently coordinate our accomplishments.
