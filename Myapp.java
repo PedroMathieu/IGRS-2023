@@ -210,6 +210,70 @@ public class Myapp extends SipServlet {
 			setStatus(toAor, "AVAILABLE");
 		}
 	}
+
+	/**
+        * This is the function that manages the MESSAGE operation
+        * @param fromAor From the SIP message received, 
+		* @param toAor From the SIP message received
+    	*/
+	protected void doMessage(SipServletRequest request) throws ServletException, IOException {
+		String fromAor = getSIPuri(request.getHeader("From"));
+		String toAor = getSIPuri(request.getHeader("To"));
+		String messageContent = new String(request.getRawContent());
+		String domain = toAor.substring(toAor.indexOf("@") + 1, toAor.length());
+		String fromContact = RegistrarDB.get(fromAor);
+
+		if (!toAor.startsWith("sip:gofind@") && !domain.equals("a.pt")) { //Verifica se a pessoa que envia a mensagem é "gofind@a.pt"
+			SipServletResponse response = request.createResponse(403); // Responda com um erro SIP indicando a não disponibilidade do serviço para o remetente
+			response.send();
+			return;
+		}
+		
+		if(!(fromAor.endsWith("@a.pt"))){
+			SipServletResponse response = request.createResponse(401); // Pedido nao autorizado pois nao pertence ao grupo restrito
+			response.send();
+			return;
+		}
+	
+		if (!isValidAor(messageContent)) { //Verifica se o utilizador de mensagem pertence ao grupo restrito
+			SipServletResponse response = request.createResponse(400); // Responda com um erro SIP indicando um pedido mal formatado
+			response.send();
+			return;
+		}
+
+		if(!RegistrarDB.containsKey(messageContent)){ //Verifica se o utilizador esta regsitado
+
+			SipServletRequest myrequest = factory.createRequest(request.getApplicationSession(), "MESSAGE", "sip:gofind@a.pt", fromContact); //Cria um MESSAGE request do gofind para o contacto que enviou a mensagem
+			SipServletResponse response = request.createResponse(200);
+			String notr = "Utilizador nao registado";
+			myrequest.setContent((Object) notr, "text/plain");
+			response.send();
+			myrequest.send();
+
+		}else if(!getStatus(messageContent).equals("AVAILABLE")) { //Verifica se o utilizador nao esta disponivel
+
+			SipServletRequest myrequest = factory.createRequest(request.getApplicationSession(), "MESSAGE", "sip:gofind@a.pt", fromContact);
+			SipServletResponse response = request.createResponse(200);
+			String status = getStatus(messageContent);
+			myrequest.setContent((Object) status, "text/plain");
+			response.send();
+			myrequest.send();
+
+		}else{ //Se estiver registado e disponivel
+
+			String toContact = RegistrarDB.get(messageContent);
+			SipServletRequest myrequest = factory.createRequest(request.getApplicationSession(), "INVITE", fromContact, toContact); //Cria um INVITE request do contacto que enviou a mensagem para o utilizador na mensagem
+			SipServletResponse response = request.createResponse(200);
+			myrequest.send();
+			response.send();
+		}
+			
+	}
+
+
+	private boolean isValidAor(String aor) {
+		return aor != null && aor.endsWith("@a.pt");
+	}
 	
 	/**
         * Auxiliary function for extracting SPI URIs
